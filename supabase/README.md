@@ -1,15 +1,20 @@
-# Supabase backend — Phase 0 (Foundations)
+# Supabase backend
 
-This folder holds the database layer for Heart2Heart Kenya. Phase 0 covers
-**auth-linked profiles, counsellor invites, the readiness assessment + private
-Wellness Score, consent capture, member verification, and an audit log** — all
-protected by Row-Level Security.
+This folder holds the database layer for Heart2Heart Kenya. Migrations apply in
+order (`0001`, then `0002`, …).
+
+- **Phase 0 — Foundations** (`0001`): auth-linked profiles, counsellor invites,
+  the readiness assessment + private Wellness Score, consent capture, member
+  verification, and an audit log.
+- **Phase 1 — Core loop** (`0002`): server-side matching, interest + mutual
+  consent, conversations & moderated messaging, reporting / blocking, and
+  crisis-safety hooks. See [Phase 1](#phase-1--core-loop-0002) below.
 
 See [`../docs/backend-scope.md`](../docs/backend-scope.md) for the full backend
 plan and later phases.
 
-> Status: the migration is written and reviewed but has **not** been run against
-> a live project yet. Apply it to a fresh Supabase project to validate.
+> Status: the migrations are written and reviewed but have **not** been run
+> against a live project yet. Apply them to a fresh Supabase project to validate.
 
 ## What it creates
 
@@ -90,9 +95,51 @@ The current prototype's onboarding maps almost 1:1:
 Wire these behind the existing state helpers (`load/save`) so the UI barely
 changes — see the "Migrating the prototype" section of the backend scope.
 
-## Not in Phase 0
+## Phase 1 — Core loop (`0002`)
 
-Matching, consent messaging + moderation, counselling/bookings/video, payments,
-couple space, community, events, and the counsellor dashboard come in later
-phases (see the scope doc). This phase is the secure foundation everything else
-builds on.
+The matching + messaging heart of the app, all enforced server-side.
+
+| Object | Purpose |
+|---|---|
+| `interests` | One side expressing interest; unique per (from, to). |
+| `connections` | A mutually-consented pair (ordered `user_a < user_b`). |
+| `conversations` | One per connected pair; created on mutual consent. |
+| `messages` | Moderated before delivery (`moderation_status`). |
+| `moderation_events` | Audit of automated / human moderation decisions. |
+| `blocks`, `reports` | Blocking and reporting for safety. |
+| `safety_flags` | Crisis-safety queue (self-harm / abuse signals), staff-only. |
+
+**Write API (SECURITY DEFINER RPCs — the client never writes these tables directly):**
+
+| RPC | Does |
+|---|---|
+| `get_matches(match_limit)` | Server-scored, curated matches. Returns **only safe display fields** — members never get blanket read on `profiles`. |
+| `member_card(target)` | One member's card, only if you have an interest/connection with them. |
+| `express_interest(target)` | Records interest; **auto-connects** if the other side already expressed interest. |
+| `respond_to_interest(id, accept)` | Accept (→ connect + open conversation) or decline. |
+| `send_message(conversation_id, body)` | Participant check → moderation → insert; raises a `safety_flag` on crisis signals. |
+| `block_user` / `unblock_user` / `report_user` | Safety actions (block ends the connection). |
+
+**Key design points**
+
+- **Consent is server-enforced:** a conversation exists only after mutual
+  interest; messaging checks participation and blocks on every send.
+- **Matching is server-authoritative:** scoring (`match_score`, mirroring the
+  client algorithm) runs in the database; the client can't see uninvited profiles.
+- **Moderation:** `moderate_text()` / `crisis_signal()` are a first-pass keyword
+  screen (matching the prototype). Replace with an **Edge Function calling a real
+  model** (OpenAI Moderation / Google Perspective) before insert, and route
+  crisis flags to an on-call counsellor. **Define the crisis protocol with a
+  licensed clinician.**
+- **Realtime:** `messages`, `interests` and `connections` are added to the
+  `supabase_realtime` publication so the client can subscribe (see
+  `Backend.subscribeMessages`).
+
+The matching client methods are wired in `../backend.js` (`getMatches`,
+`expressInterest`, `sendMessage`, `subscribeMessages`, …), ready to back the
+existing matches/chat UI when Supabase is configured.
+
+## Not yet built
+
+Counselling/bookings/video, payments (M-Pesa), couple space, community, events,
+and the counsellor dashboard come in later phases (see the scope doc).

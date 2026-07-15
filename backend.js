@@ -147,10 +147,75 @@ const Backend = (() => {
     if (error) throw error;
   }
 
+  /* ---- Phase 1: matching, consent & messaging ---- */
+  async function getMatches(limit = 10){
+    const { data, error } = await client.rpc("get_matches", { match_limit: limit });
+    if (error) throw error;
+    return data || [];
+  }
+  async function memberCard(id){
+    const { data, error } = await client.rpc("member_card", { target: id });
+    if (error) throw error;
+    return (data && data[0]) || null;
+  }
+  async function expressInterest(id){
+    const { data, error } = await client.rpc("express_interest", { target: id });
+    if (error) throw error;
+    return data; // 'sent' | 'connected' | 'blocked' | 'invalid'
+  }
+  async function respondInterest(interestId, accept){
+    const { data, error } = await client.rpc("respond_to_interest", { interest_id: interestId, accept });
+    if (error) throw error;
+    return data; // 'connected' | 'declined' | 'not_found'
+  }
+  async function blockUser(id){ const { error } = await client.rpc("block_user",   { target: id }); if (error) throw error; }
+  async function unblockUser(id){ const { error } = await client.rpc("unblock_user", { target: id }); if (error) throw error; }
+  async function reportUser(id, reason, context){
+    const { error } = await client.rpc("report_user", { target: id, reason, context: context || {} });
+    if (error) throw error;
+  }
+  async function inboundInterests(){
+    const user = await getUser(); if (!user) return [];
+    const { data, error } = await client.from("interests")
+      .select("id, from_user, created_at").eq("to_user", user.id).eq("status", "pending");
+    if (error) throw error;
+    return data || [];
+  }
+  async function listConversations(){
+    const { data, error } = await client.from("conversations").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+  async function listMessages(conversationId){
+    const { data, error } = await client.from("messages")
+      .select("id, sender, body, moderation_status, created_at")
+      .eq("conversation_id", conversationId).order("created_at", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+  async function sendMessage(conversationId, body){
+    const { data, error } = await client.rpc("send_message", { conversation_id: conversationId, body });
+    if (error) throw error;
+    return (data && data[0]) || null; // { id, moderation_status }
+  }
+  // Subscribe to new messages in a conversation. Returns an unsubscribe fn.
+  function subscribeMessages(conversationId, onInsert){
+    const ch = client.channel("messages:" + conversationId)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: "conversation_id=eq." + conversationId },
+        (payload) => onInsert(payload.new))
+      .subscribe();
+    return () => client.removeChannel(ch);
+  }
+
   return {
     init, enabled, configured,
     signUp, signIn, signOut, getUser,
     redeemInvite, saveProfile, setOnboarded, getProfile, fromRow,
     saveReadiness, saveConsent,
+    // Phase 1
+    getMatches, memberCard, expressInterest, respondInterest,
+    blockUser, unblockUser, reportUser, inboundInterests,
+    listConversations, listMessages, sendMessage, subscribeMessages,
   };
 })();
