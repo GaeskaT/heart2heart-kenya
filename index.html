@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f6f6a" />
+  <title>Heart2Heart Kenya</title>
+  <meta name="description" content="A counsellor-guided relationship app for healthy dating and marriage. Healing first. Healthy relationships next." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%92%9A%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <!-- Phone frame is purely cosmetic on wide screens; the app fills the screen on mobile -->
+  <div id="app-shell">
+    <main id="screen" aria-live="polite"><!-- screens render here --></main>
+    <nav id="tabbar" hidden>
+      <button class="tab" data-nav="home"   aria-label="Home">
+        <span class="tab-ico">🏠</span><span class="tab-txt">Home</span>
+      </button>
+      <button class="tab" data-nav="matches" aria-label="Matches">
+        <span class="tab-ico">💞</span><span class="tab-txt">Matches</span>
+      </button>
+      <button class="tab" data-nav="messages" aria-label="Messages">
+        <span class="tab-ico">💬</span><span class="tab-txt">Messages</span>
+        <span class="tab-badge" id="msg-badge" hidden></span>
+      </button>
+      <button class="tab" data-nav="learn" aria-label="Learn">
+        <span class="tab-ico">📚</span><span class="tab-txt">Learn</span>
+      </button>
+      <button class="tab" data-nav="profile" aria-label="Profile">
+        <span class="tab-ico">🌿</span><span class="tab-txt">You</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Toast host -->
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
