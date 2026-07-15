@@ -32,6 +32,21 @@ Or just open `index.html` directly in a browser.
 Best viewed at phone width (the layout is mobile-first; on desktop it renders in a
 centered phone frame).
 
+## Optional: connect a real backend (Supabase)
+
+The app runs fully offline on `localStorage` by default. To switch onboarding to
+**real Supabase Auth + database** (Phase 0):
+
+1. Apply the schema in [`supabase/`](supabase/) to a Supabase project.
+2. Enable Email auth in the Supabase dashboard.
+3. Paste your project **URL** and **anon/public** key into
+   [`supabase-config.js`](supabase-config.js).
+
+That's it — the app auto-detects the config and wires sign-up / log-in, invite
+redemption, the profile, the readiness assessment and consent to Supabase.
+With the config blank it stays in local-only mode (nothing external is loaded).
+The `anon` key is safe to commit; **never** put the `service_role` key here.
+
 ## What's built (real, working logic)
 
 The four stages of the member journey are implemented end to end:

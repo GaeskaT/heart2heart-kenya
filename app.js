@@ -25,6 +25,7 @@ const DEFAULT_STATE = {
 };
 
 let S = load();
+let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
 
 function load(){
   try{
@@ -319,7 +320,7 @@ function render(){
   const { name, param } = parseHash();
 
   // Onboarding guard
-  const openRoutes = ["welcome","invite","signup","readiness","conduct","result"];
+  const openRoutes = ["welcome","login","invite","signup","readiness","conduct","result"];
   if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
   if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
 
@@ -381,10 +382,42 @@ route("welcome", ()=>({
       <button class="btn secondary" data-act="begin">I have a counsellor invitation</button>
       <p class="center tiny" style="opacity:.85">Membership is by counsellor approval. Already a member? Continue below.</p>
       <button class="btn" data-act="begin">Get started</button>
+      ${Backend.enabled()?`<button class="btn ghost" data-act="login" style="color:#fff">Log in</button>`:""}
     </div>
   </div>`,
   mount(root){
     $$("[data-act=begin]", root).forEach(b=> b.onclick = ()=> go("invite"));
+    const li = $("[data-act=login]", root); if(li) li.onclick = ()=> go("login");
+  }
+}));
+
+/* ---- Log in (Supabase mode only) ---- */
+route("login", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2>Welcome back</h2></div>
+  <div class="pad stack">
+    <p class="muted tiny">Log in to your Heart2Heart account.</p>
+    <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+    <label class="field"><span>Password</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password"></label>
+    <button class="btn" id="login">Log in</button>
+    <p class="center tiny faint">New here? <a href="#/invite">Start with an invitation</a></p>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("welcome");
+    $("#login",root).onclick = async ()=>{
+      const email = $("#email",root).value.trim(), password = $("#password",root).value;
+      if(!email || !password){ toast("Enter your email and password"); return; }
+      const btn = $("#login",root); btn.disabled = true; btn.textContent = "Logging in…";
+      try{
+        await Backend.signIn(email, password);
+        const prof = await Backend.getProfile();
+        if(prof){ S.user = Backend.fromRow(prof); S.onboarded = !!prof.onboarded; save(); }
+        toast("Welcome back 💚");
+        go(S.onboarded ? "home" : "invite");
+      }catch(e){
+        toast(e.message || "Login failed"); btn.disabled = false; btn.textContent = "Log in";
+      }
+    };
   }
 }));
 
@@ -413,7 +446,7 @@ route("invite", ()=>({
     const boxes = $$(".elig",root);
     const check = ()=>{ verify.disabled = !(code.value.trim().length>=3 && boxes.every(b=>b.checked)); };
     code.oninput = check; boxes.forEach(b=> b.onchange = check);
-    verify.onclick = ()=>{ toast("Invitation verified ✓"); go("signup"); };
+    verify.onclick = ()=>{ pendingInvite = code.value.trim(); toast("Invitation verified ✓"); go("signup"); };
   }
 }));
 
@@ -425,6 +458,13 @@ route("signup", ()=>{
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Your profile</h2></div>
   <div class="pad stack" id="signup">
     <p class="muted tiny">This helps us find a few genuinely compatible people. You can edit anything later.</p>
+
+    ${(Backend.enabled() && !S.onboarded)?`
+    <div class="card flat stack">
+      <p class="tiny faint">Create your account</p>
+      <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+      <label class="field"><span>Password</span><input class="input" id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters"></label>
+    </div>`:""}
 
     <label class="field"><span>First name</span>
       <input class="input" id="name" value="${esc(u.name||"")}" placeholder="Your name"></label>
@@ -484,7 +524,7 @@ route("signup", ()=>{
       if(!ch.classList.contains("on") && on.length>=5){ toast("Choose up to 5 values"); return; }
       ch.classList.toggle("on");
     });
-    $("#continue",root).onclick = ()=>{
+    $("#continue",root).onclick = async ()=>{
       const g = id => $("#"+id,root);
       const values = $$("#values .chip.on",root).map(c=>c.dataset.v);
       const name = g("name").value.trim();
@@ -492,7 +532,7 @@ route("signup", ()=>{
       if(name.length<2){ toast("Please add your name"); return; }
       if(!(age>=18)){ toast("Please add a valid age (18+)"); return; }
       if(values.length<3){ toast("Pick at least 3 values"); return; }
-      S.user = {
+      const u = {
         name, age, gender:g("gender").value, county:g("county").value,
         faith:g("faith").value, education:g("education").value, career:g("career").value.trim(),
         intention:g("intention").value, familyGoal:g("familyGoal").value, values,
@@ -500,6 +540,37 @@ route("signup", ()=>{
         bio:g("bio").value.trim(),
         color:"#0f6f6a", initials:initials(name),
       };
+
+      if(Backend.enabled() && S.onboarded){
+        // editing an existing profile — just persist the update
+        const btn = $("#continue",root); btn.disabled = true; btn.textContent = "Saving…";
+        try{ await Backend.saveProfile(u); S.user = u; save(); toast("Profile updated ✓"); go("profile"); }
+        catch(e){ toast(e.message || "Could not save"); btn.disabled=false; btn.textContent="Continue to Relationship Readiness"; }
+        return;
+      }
+
+      if(Backend.enabled()){
+        const email = g("email")?.value.trim(), password = g("password")?.value;
+        if(!email || !(password||"").length){ toast("Add your email and password"); return; }
+        if(password.length<6){ toast("Password must be at least 6 characters"); return; }
+        const btn = $("#continue",root); btn.disabled = true; btn.textContent = "Creating account…";
+        try{
+          await Backend.signUp(email, password);
+          if(pendingInvite){
+            const ok = await Backend.redeemInvite(pendingInvite);
+            if(!ok){ toast("That invitation code isn't valid — check with your counsellor."); btn.disabled=false; btn.textContent="Continue to Relationship Readiness"; return; }
+          }
+          await Backend.saveProfile(u);
+          S.user = u; save();
+          go("readiness");
+        }catch(e){
+          toast(e.message || "Could not create your account");
+          btn.disabled = false; btn.textContent = "Continue to Relationship Readiness";
+        }
+        return;
+      }
+
+      S.user = u;
       save();
       go("readiness");
     };
@@ -556,7 +627,14 @@ route("readiness", ()=>{
       S.readiness.answers[dim.id] = picked;
       save();
       if(rdIndex < READINESS.length-1){ rdIndex++; render(); }
-      else { computeReadiness(); go("conduct"); }
+      else {
+        computeReadiness();
+        if(Backend.enabled()){
+          Backend.saveReadiness(S.readiness.answers, S.readiness.scores, S.readiness.overall)
+            .catch(e=> console.warn("[Backend] saveReadiness failed", e));
+        }
+        go("conduct");
+      }
     };
   }};
 });
@@ -594,6 +672,9 @@ route("conduct", ()=>({
     boxes.forEach(b=> b.onchange = check);
     btn.onclick = ()=>{
       S.conductAgreed = true; save();
+      if(Backend.enabled()){
+        Backend.saveConsent("v1", true, true).catch(e=> console.warn("[Backend] saveConsent failed", e));
+      }
       go("result");
     };
   }
@@ -631,6 +712,9 @@ route("result", ()=>{
   mount(root){
     $("#done",root).onclick = ()=>{
       S.onboarded = true; save();
+      if(Backend.enabled()){
+        Backend.setOnboarded(true).catch(e=> console.warn("[Backend] setOnboarded failed", e));
+      }
       seedInbound();
       go("home");
     };
@@ -1141,12 +1225,17 @@ route("profile", ()=>{
 
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
+    ${Backend.enabled()?`<div class="list-row" data-act="signout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Sign out</b><div class="sub">End your session on this device</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
   </div>`,
   mount(root){
     wireFeatureRows(root);
     $("[data-act=edit]",root).onclick = ()=> go("signup");
+    const so = $("[data-act=signout]",root); if(so) so.onclick = async ()=>{
+      try{ await Backend.signOut(); }catch(e){}
+      rdIndex=0; reset(); toast("Signed out");
+    };
     $("[data-act=reset]",root).onclick = ()=>{
       const box = sheet(`<h3>Reset demo?</h3><p class="muted tiny" style="margin:8px 0 14px">This clears your profile, matches and messages on this device.</p>
         <button class="btn danger" id="yes">Yes, reset everything</button><button class="btn ghost" id="no" style="margin-top:6px">Cancel</button>`);
@@ -2153,4 +2242,19 @@ function wireFeatureRows(root){
 }
 
 /* ---------------- Boot ---------------- */
-render();
+(async function boot(){
+  if(Backend.configured){
+    try{
+      await Backend.init();
+      if(Backend.enabled()){
+        const prof = await Backend.getProfile();     // null if no active session
+        if(prof){
+          S.user = Backend.fromRow(prof);
+          S.onboarded = !!prof.onboarded;
+          save();
+        }
+      }
+    }catch(e){ console.warn("[Backend] boot restore failed — continuing in local mode.", e); }
+  }
+  render();
+})();

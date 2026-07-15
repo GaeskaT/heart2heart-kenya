@@ -1,0 +1,156 @@
+/* ============================================================
+   Heart2Heart Kenya — Backend abstraction (Supabase, Phase 0)
+   ------------------------------------------------------------
+   Progressive enhancement: if supabase-config.js has a url +
+   anonKey, this connects to Supabase Auth + the Phase 0 tables.
+   If not, `Backend.enabled` is false and app.js keeps using
+   localStorage exactly as before.
+
+   Only Phase 0 surfaces are wired here: auth, profiles, invite
+   redemption, readiness assessment, and consent. Later phases
+   (matching, messaging, etc.) remain local for now.
+   ============================================================ */
+"use strict";
+
+const Backend = (() => {
+  const CDN = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  const cfg = (window.SUPABASE_CONFIG || {});
+  const configured = !!(cfg.url && cfg.anonKey && !/YOUR_/.test(cfg.url + cfg.anonKey));
+
+  let client = null;
+  let ready = false;
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      if (window.supabase && window.supabase.createClient) return resolve(window.supabase);
+      const s = document.createElement("script");
+      s.src = src; s.async = true;
+      s.onload = () => resolve(window.supabase);
+      s.onerror = () => reject(new Error("Failed to load Supabase client"));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function init(){
+    if (!configured) return false;
+    try {
+      const lib = await loadScript(CDN);
+      client = lib.createClient(cfg.url, cfg.anonKey, {
+        auth: { persistSession: true, autoRefreshToken: true },
+      });
+      ready = true;
+      return true;
+    } catch (e) {
+      console.warn("[Backend] Supabase failed to initialise — staying in local mode.", e);
+      ready = false;
+      return false;
+    }
+  }
+
+  const enabled = () => configured && ready;
+
+  /* ---- Auth ---- */
+  async function signUp(email, password){
+    const { data, error } = await client.auth.signUp({ email, password });
+    if (error) throw error;
+    return data;
+  }
+  async function signIn(email, password){
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  }
+  async function signOut(){ if (client) await client.auth.signOut(); }
+  async function getUser(){
+    if (!enabled()) return null;
+    const { data } = await client.auth.getUser();
+    return data ? data.user : null;
+  }
+
+  /* ---- Invites ---- */
+  async function redeemInvite(code){
+    const { data, error } = await client.rpc("redeem_invite", { invite_code: code });
+    if (error) throw error;
+    return data === true; // true if redeemed, false if invalid/expired
+  }
+
+  /* ---- Profiles ---- */
+  // Map the app's user object <-> the profiles table columns.
+  function toRow(u){
+    return {
+      full_name: u.name || null,
+      age: u.age || null,
+      gender: u.gender || null,
+      county: u.county || null,
+      faith: u.faith || null,
+      education: u.education || null,
+      career: u.career || null,
+      intention: u.intention || null,
+      family_goal: u.familyGoal || null,
+      values: u.values || [],
+      age_min: u.ageMin || 18,
+      age_max: u.ageMax || 99,
+      bio: u.bio || null,
+      avatar_color: u.color || null,
+    };
+  }
+  function fromRow(r){
+    if (!r) return null;
+    return {
+      name: r.full_name || "", age: r.age || null, gender: r.gender || "",
+      county: r.county || "", faith: r.faith || "", education: r.education || "",
+      career: r.career || "", intention: r.intention || "", familyGoal: r.family_goal || "",
+      values: r.values || [], ageMin: r.age_min || 18, ageMax: r.age_max || 99,
+      bio: r.bio || "", color: r.avatar_color || "#0f6f6a",
+      initials: (r.full_name || "?").trim().split(/\s+/).map(w => w[0]).slice(0,2).join("").toUpperCase(),
+    };
+  }
+
+  async function saveProfile(u, extra){
+    const user = await getUser();
+    if (!user) throw new Error("Not signed in");
+    const row = Object.assign({ id: user.id }, toRow(u), extra || {});
+    const { error } = await client.from("profiles").upsert(row, { onConflict: "id" });
+    if (error) throw error;
+  }
+  async function setOnboarded(v){
+    const user = await getUser();
+    if (!user) return;
+    await client.from("profiles").update({ onboarded: v }).eq("id", user.id);
+  }
+  async function getProfile(){
+    const user = await getUser();
+    if (!user) return null;
+    const { data, error } = await client.from("profiles").select("*").eq("id", user.id).single();
+    if (error && error.code !== "PGRST116") throw error; // ignore "no rows"
+    return data || null;
+  }
+
+  /* ---- Readiness ---- */
+  async function saveReadiness(answers, dimensionScores, overall){
+    const user = await getUser();
+    if (!user) throw new Error("Not signed in");
+    const { error } = await client.from("readiness_assessments").insert({
+      user_id: user.id, answers, dimension_scores: dimensionScores, overall,
+    });
+    if (error) throw error;
+  }
+
+  /* ---- Consent ---- */
+  async function saveConsent(policyVersion, codeOfConduct, dataProcessing){
+    const user = await getUser();
+    if (!user) throw new Error("Not signed in");
+    const { error } = await client.from("consents").insert({
+      user_id: user.id, policy_version: policyVersion,
+      code_of_conduct: codeOfConduct, data_processing: dataProcessing,
+    });
+    if (error) throw error;
+  }
+
+  return {
+    init, enabled, configured,
+    signUp, signIn, signOut, getUser,
+    redeemInvite, saveProfile, setOnboarded, getProfile, fromRow,
+    saveReadiness, saveConsent,
+  };
+})();
