@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   readiness:{ answers:{}, scores:{}, overall:0, done:false },
   connections:{},   // candidateId -> {status, messages:[], unread}
   goals:[],
+  learning:{ completed:{} },  // lessonId -> true
   seededInbound:false,
 };
 
@@ -58,6 +59,29 @@ const candidate = id => CANDIDATES.find(c=>c.id===id);
 function conn(id){
   if(!S.connections[id]) S.connections[id] = { status:"none", messages:[], unread:0 };
   return S.connections[id];
+}
+
+/* ---- Learning progress ---- */
+function completedMap(){
+  if(!S.learning) S.learning = { completed:{} };
+  if(!S.learning.completed) S.learning.completed = {};
+  return S.learning.completed;
+}
+const lessonDone = id => !!completedMap()[id];
+function markLesson(id){ completedMap()[id] = true; save(); }
+function courseProgress(course){
+  const done = course.lessons.filter(l => lessonDone(l.id)).length;
+  const total = course.lessons.length;
+  return { done, total, pct: total ? Math.round(done/total*100) : 0 };
+}
+function academyTotals(){
+  let done = 0, total = 0;
+  COURSES.forEach(c=>{ total += c.lessons.length; done += c.lessons.filter(l=>lessonDone(l.id)).length; });
+  return { done, total, pct: total ? Math.round(done/total*100) : 0 };
+}
+/* First not-yet-done lesson across a course, else first lesson */
+function nextLessonOf(course){
+  return course.lessons.find(l => !lessonDone(l.id)) || course.lessons[0];
 }
 
 /* ---------------- Compatibility matcher ---------------- */
@@ -503,7 +527,7 @@ route("home", ()=>{
     ${topMatch ? matchCardHTML(topMatch) : ""}
 
     <div class="sec-h"><h3>Keep growing</h3></div>
-    ${featureRow("learn","📚","Learning Academy","Courses on healthy love & communication")}
+    ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
     ${featureRow("feature/wellness","🧘","Wellness Tools","Mood, gratitude, breathing & reflection")}
     ${featureRow("feature/counsellor","🧑‍⚕️","Counsellor Support","Book a session, ask, or join a group")}
   </div>`,
@@ -791,29 +815,147 @@ function bubbleHTML(m){
 }
 
 /* ---- Learn / Academy ---- */
-route("learn", ()=>({
+route("learn", ()=>{
+  const t = academyTotals();
+  // "Continue learning": a course that's started but unfinished, else the Start-here course
+  const inProgress = COURSES.find(c=>{ const p=courseProgress(c); return p.done>0 && p.done<p.total; });
+  const resume = inProgress || COURSES[0];
+  const rp = courseProgress(resume);
+  return {
   html:`
   <div class="pad">
     <h1>Learning Academy</h1>
     <p class="muted tiny" style="margin-top:4px">Grow the skills healthy relationships are built on.</p>
-    <div class="sec-h"><h3>Guided-dating toolkit</h3></div>
-    <div class="prompt-card">
-      <div class="kicker">Try this together</div>
-      <div class="q">${EXERCISES[0].t}</div>
-      <p class="tiny" style="opacity:.9;margin-top:6px">${EXERCISES[0].d}</p>
+
+    <div class="card" style="margin-top:14px">
+      <div class="row between"><b>Your progress</b><span class="chip">${t.done}/${t.total} lessons</span></div>
+      <div class="bar" style="margin-top:10px"><i style="width:${t.pct}%"></i></div>
     </div>
-    <div class="sec-h"><h3>Courses</h3></div>
-    ${ACADEMY_COURSES.map(c=>`
-      <div class="list-row" data-course="${esc(c.t)}">
-        <div class="lico">📘</div>
-        <div class="grow"><b>${esc(c.t)}</b><div class="sub">${c.n} lessons${c.tag?` · <span style="color:var(--coral-600)">${c.tag}</span>`:""}</div></div>
-        <div class="chev">›</div>
-      </div>`).join("")}
+
+    <div class="sec-h"><h3>${rp.done>0 ? "Continue learning" : "Start here"}</h3></div>
+    <div class="prompt-card" data-course="${resume.id}" style="cursor:pointer">
+      <div class="kicker">${resume.icon} ${rp.done>0 ? `${rp.done}/${rp.total} complete` : (resume.tag||"New course")}</div>
+      <div class="q">${esc(nextLessonOf(resume).title)}</div>
+      <p class="tiny" style="opacity:.9;margin-top:6px">${esc(resume.title)}</p>
+      <button class="btn secondary sm" style="margin-top:14px;background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.4)">${rp.done>0 ? "Resume →" : "Begin →"}</button>
+    </div>
+
+    <div class="sec-h"><h3>All courses</h3></div>
+    ${COURSES.map(c=>{
+      const p = courseProgress(c);
+      const badge = p.pct===100 ? `<span class="chip">✓ Done</span>`
+                  : p.done>0    ? `<span class="chip gold">${p.done}/${p.total}</span>`
+                  : c.tag       ? `<span class="chip coral" style="background:var(--coral-50)">${c.tag}</span>` : "";
+      return `
+      <div class="list-row" data-course="${c.id}">
+        <div class="lico">${c.icon}</div>
+        <div class="grow"><div class="row between" style="gap:8px"><b>${esc(c.title)}</b>${badge}</div>
+          <div class="sub">${c.lessons.length} lessons · ${p.pct}% complete</div>
+          <div class="bar" style="height:5px;margin-top:7px"><i style="width:${p.pct}%"></i></div>
+        </div>
+      </div>`;
+    }).join("")}
   </div>`,
   mount(root){
-    $$("[data-course]",root).forEach(el=> el.onclick = ()=> toast(`"${el.dataset.course}" — full course coming in the next release`));
-  }
-}));
+    $$("[data-course]",root).forEach(el=> el.onclick = ()=> go("course", el.dataset.course));
+  }};
+});
+
+/* ---- Course detail ---- */
+route("course", (id)=>{
+  const c = courseById(id); if(!c) return go("learn");
+  const p = courseProgress(c);
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Course</h2></div>
+  <div class="pad stack">
+    <div class="row" style="gap:14px">
+      <div class="lico" style="width:58px;height:58px;font-size:30px;border-radius:16px">${c.icon}</div>
+      <div class="grow"><h2>${esc(c.title)}</h2>${c.tag?`<span class="chip coral tiny" style="margin-top:4px;display:inline-block">${c.tag}</span>`:""}</div>
+    </div>
+    <p class="muted">${esc(c.blurb)}</p>
+    <div class="card flat">
+      <div class="row between"><span class="tiny faint">PROGRESS</span><b class="tiny">${p.done}/${p.total} · ${p.pct}%</b></div>
+      <div class="bar" style="margin-top:8px"><i style="width:${p.pct}%"></i></div>
+    </div>
+
+    <div class="sec-h" style="margin-top:8px"><h3>Lessons</h3></div>
+    ${c.lessons.map((l,i)=>{
+      const done = lessonDone(l.id);
+      return `<div class="list-row" data-lesson="${l.id}">
+        <div class="lico" style="background:${done?'var(--teal-700)':'var(--teal-50)'};color:${done?'#fff':'var(--teal-700)'};font-weight:800">${done?'✓':i+1}</div>
+        <div class="grow"><b>${esc(l.title)}</b><div class="sub">${l.minutes} min read${done?' · completed':''}</div></div>
+        <div class="chev">›</div>
+      </div>`;
+    }).join("")}
+
+    <button class="btn" id="startc" style="margin-top:16px">${p.done>0 ? (p.pct===100?"Review from start":"Continue course") : "Start course"}</button>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("learn");
+    $$("[data-lesson]",root).forEach(el=> el.onclick = ()=> go("lesson", `${c.id}~${el.dataset.lesson}`));
+    $("#startc",root).onclick = ()=>{
+      const target = p.pct===100 ? c.lessons[0] : nextLessonOf(c);
+      go("lesson", `${c.id}~${target.id}`);
+    };
+  }};
+});
+
+/* ---- Lesson reader ---- */
+route("lesson", (param="")=>{
+  const [courseId, lessonId] = param.split("~");
+  const ref = lessonRef(courseId, lessonId);
+  if(!ref) return go("learn");
+  const { course, lesson, idx, next } = ref;
+  const done = lessonDone(lesson.id);
+  return {
+  html:`
+  <div class="topbar">
+    <button class="back" data-act="back">←</button>
+    <div class="grow"><div class="tiny faint">${esc(course.title)} · ${idx+1}/${course.lessons.length}</div></div>
+  </div>
+  <div class="pad stack">
+    <div class="steps">${course.lessons.map((_,i)=>`<i class="${i<=idx?'on':''}"></i>`).join("")}</div>
+    <h1 style="margin-top:6px">${esc(lesson.title)}</h1>
+    <p class="tiny faint">${lesson.minutes} min read</p>
+    <p style="font-size:16px;color:var(--ink-soft)">${esc(lesson.intro)}</p>
+
+    ${lesson.sections.map(s=>`
+      <div class="card">
+        ${s.h?`<h3 style="margin-bottom:8px">${esc(s.h)}</h3>`:""}
+        ${(s.p||[]).map(par=>`<p style="margin-bottom:10px">${esc(par)}</p>`).join("")}
+        ${s.list?`<ul style="margin:4px 0 0;padding-left:20px">${s.list.map(li=>`<li style="margin-bottom:7px">${esc(li)}</li>`).join("")}</ul>`:""}
+      </div>`).join("")}
+
+    <div class="card" style="background:var(--teal-50)">
+      <p class="tiny faint" style="margin-bottom:8px;color:var(--teal-900)">KEY TAKEAWAYS</p>
+      <div class="stack">${lesson.takeaways.map(t=>`<div class="reason"><span class="k">✓</span><span>${esc(t)}</span></div>`).join("")}</div>
+    </div>
+
+    ${lesson.reflect?`<div class="prompt-card">
+      <div class="kicker">Reflect</div>
+      <div class="q" style="font-size:17px">${esc(lesson.reflect)}</div>
+      <textarea class="input" id="rfx" placeholder="Write freely — just for you." style="margin-top:12px;min-height:80px;background:rgba(255,255,255,.92)"></textarea>
+    </div>`:""}
+
+    <button class="btn" id="complete">${done ? (next?"Next lesson →":"Back to course") : (next?"Mark complete & continue →":"Mark complete ✓")}</button>
+    ${done?`<p class="center tiny faint">✓ You completed this lesson</p>`:""}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("course", course.id);
+    $("#complete",root).onclick = ()=>{
+      const wasDone = lessonDone(lesson.id);
+      if(!wasDone){ markLesson(lesson.id); updateBadge(); }
+      const cp = courseProgress(course);
+      if(next){ go("lesson", `${course.id}~${next.id}`); }
+      else {
+        if(!wasDone && cp.pct===100) toast(`🎉 Course complete: ${course.title}`);
+        else if(!wasDone) toast("Lesson completed ✓");
+        go("course", course.id);
+      }
+    };
+  }};
+});
 
 /* ---- Profile / You ---- */
 route("profile", ()=>{

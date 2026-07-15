@@ -95,18 +95,7 @@ const DATE_IDEAS = [
   "Sunset at a viewpoint with your phones away.",
 ];
 
-const ACADEMY_COURSES = [
-  { t:"Healthy Dating Foundations", n:6, tag:"Start here" },
-  { t:"Recognising Red Flags", n:5, tag:"Safety" },
-  { t:"Green Flags & Secure Love", n:4, tag:"Popular" },
-  { t:"Emotional Intelligence", n:7 },
-  { t:"The Five Love Languages", n:5 },
-  { t:"Communication that Connects", n:6 },
-  { t:"Forgiveness & Letting Go", n:4 },
-  { t:"Building & Rebuilding Trust", n:5 },
-  { t:"Marriage Preparation", n:8, tag:"Stage 4" },
-  { t:"Parenting Readiness", n:6 },
-];
+/* Academy course + lesson content now lives in lessons.js (COURSES). */
 
 /* ---- Candidate pool ----
    Each has the attributes the matcher scores against. Photos are avatar

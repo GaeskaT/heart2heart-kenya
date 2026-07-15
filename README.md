@@ -42,12 +42,19 @@ The four stages of the member journey are implemented end to end:
    after *both* people express interest. Includes report/block and a lightweight
    AI-moderation guard on abusive language.
 
+### Learning Academy (fully built)
+
+10 courses / 35 lessons of real, readable content — course detail pages, a
+lesson reader (intro → sections → key takeaways → reflection prompt), completion
+tracking, per-course and overall progress bars, a "continue learning" resume
+card, and a course-complete celebration. Progress persists in `localStorage` and
+rolls up onto the Home and Learn screens.
+
 ## What's stubbed (navigable placeholders)
 
 Presented as real, browsable screens describing what's inside, marked as roadmap:
-Stage 4 Marriage Preparation, Couple Space, Community Groups, Events, Learning
-Academy (course list is live; lessons are stubbed), Wellness Tools, Counsellor
-Support, and Premium.
+Stage 4 Marriage Preparation, Couple Space, Community Groups, Events, Wellness
+Tools, Counsellor Support, and Premium.
 
 ## Files
 
@@ -56,6 +63,7 @@ Support, and Premium.
 | `index.html` | App shell + bottom tab bar |
 | `style.css`  | Design system (warm, calm, trustworthy; mobile-first) |
 | `data.js`    | Seed data: candidate pool, readiness questions, counties, content |
+| `lessons.js` | Learning Academy: 10 courses / 35 lessons of content |
 | `app.js`     | SPA engine: hash router, state, compatibility matcher, all screens |
 
 ## Try the flow
