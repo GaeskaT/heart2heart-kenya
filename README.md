@@ -6,11 +6,19 @@ A counsellor-guided relationship app for healthy dating and marriage. Unlike a
 conventional dating app, Heart2Heart is for adults who have completed counselling
 and are emotionally ready to build intentional, respectful relationships.
 
-This repo is a **core-journey prototype** — a fully working, offline, single-page
-web app (no backend, no build step). All state is saved in the browser's
+This repo is a **front-end prototype** — a fully working, offline, single-page web
+app (no backend, no build step). All state is saved in the browser's
 `localStorage`.
 
-## Run it
+## 📱 Live demo
+
+**[https://gaeskat.github.io/heart2heart-kenya/](https://gaeskat.github.io/heart2heart-kenya/)**
+
+Works on any phone or desktop browser — no sign-in needed. Best experienced at
+phone width. Auto-updates on every push to `main`. Reset anytime from
+**You → Reset demo**.
+
+## Run it locally
 
 Any static file server works. For example:
 
