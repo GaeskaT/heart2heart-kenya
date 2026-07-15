@@ -150,6 +150,75 @@ const CHECKIN_QUESTIONS = [
   { id:"self",       q:"How kind have you been to yourself?",    opts:["Harsh","Critical","Neutral","Gentle","Very kind"] },
 ];
 
+/* ---- Counsellor Support content ---- */
+const COUNSELLORS = [
+  { id:"cn1", name:"Dr. Njeri Kamau", color:"#0f6f6a", title:"Clinical Psychologist",
+    focus:["Healing after divorce","Trauma","Self-worth"],
+    bio:"15 years walking with people through painful endings toward healthy new beginnings." },
+  { id:"cn2", name:"Amina Hassan", color:"#e0a44b", title:"Marriage & Family Therapist",
+    focus:["Communication","Conflict","Couples"],
+    bio:"Helps individuals and couples turn conflict into closeness, with warmth and practicality." },
+  { id:"cn3", name:"Grace Wanjiku", color:"#9b3d54", title:"Counselling Psychologist",
+    focus:["Grief","Widowhood","Loneliness"],
+    bio:"A gentle guide for those rebuilding after loss and rediscovering their worth." },
+  { id:"cn4", name:"Pastor Daniel Ochieng", color:"#6b4a72", title:"Faith-based Counsellor",
+    focus:["Marriage prep","Faith","Forgiveness"],
+    bio:"Integrates faith and sound counselling for couples preparing for a lasting marriage." },
+];
+
+const SESSION_TYPES = [
+  { id:"refresher", name:"Refresher check-in", mins:30, desc:"A short catch-up to keep you steady." },
+  { id:"individual", name:"Individual counselling", mins:50, desc:"One-to-one support for what you're facing." },
+  { id:"couples", name:"Couples session", mins:50, desc:"Grow together with professional guidance." },
+  { id:"quick", name:"Quick support call", mins:15, desc:"A brief call when you just need to talk." },
+];
+
+const SESSION_FORMATS = [
+  { id:"video", name:"Video call", icon:"🎥" },
+  { id:"phone", name:"Phone call", icon:"📞" },
+  { id:"inperson", name:"In person", icon:"🏢" },
+];
+
+const SLOT_TIMES = ["09:00","11:00","14:00","16:00","18:00"];
+
+/* Webinars — inDays is offset from today, computed at render time */
+const WEBINARS = [
+  { id:"w1", title:"Rebuilding Trust After Betrayal", by:"Dr. Njeri Kamau", inDays:3, time:"19:00",
+    blurb:"What repair really requires, and whether — and when — trust can be rebuilt." },
+  { id:"w2", title:"Healthy Communication in Marriage", by:"Amina Hassan", inDays:6, time:"18:30",
+    blurb:"Turn everyday conversations into connection, even in disagreement." },
+  { id:"w3", title:"Grief, Grace and New Beginnings", by:"Grace Wanjiku", inDays:10, time:"17:00",
+    blurb:"Honouring loss while gently opening to love again." },
+  { id:"w4", title:"Faith and Partnership", by:"Pastor Daniel Ochieng", inDays:14, time:"19:00",
+    blurb:"Building a relationship on shared values and lasting commitment." },
+];
+
+const SUPPORT_GROUPS = [
+  { id:"g1", name:"Healing After Divorce", when:"Tuesdays · 7:00 pm", by:"Dr. Njeri Kamau", members:24, icon:"🌱" },
+  { id:"g2", name:"Widows & Widowers Circle", when:"Thursdays · 6:00 pm", by:"Grace Wanjiku", members:18, icon:"🕊️" },
+  { id:"g3", name:"Singles Preparing for Marriage", when:"Saturdays · 10:00 am", by:"Pastor Daniel Ochieng", members:31, icon:"💍" },
+  { id:"g4", name:"Single Parents Together", when:"Wednesdays · 7:00 pm", by:"Amina Hassan", members:22, icon:"👪" },
+];
+
+/* Confidential Q&A — supportive auto-acknowledgements (a real counsellor follows up) */
+const QA_ACKS = [
+  "Thank you for trusting us with this. What you're feeling makes complete sense, and you're not alone in it.",
+  "That takes courage to put into words. A counsellor will follow up personally within 24 hours — for now, be gentle with yourself.",
+  "We hear you. This is a safe place to bring exactly this kind of question, and there's no judgement here.",
+  "Thank you for reaching out. One of our counsellors will reply in detail soon; in the meantime, your wellbeing matters.",
+];
+
+/* Educational resources — 'course' items deep-link into the Academy */
+const RESOURCES = [
+  { title:"Recognising red flags", kind:"course", ref:"red-flags", icon:"🚩" },
+  { title:"Rebuilding trust", kind:"course", ref:"trust", icon:"🤝" },
+  { title:"Communication that connects", kind:"course", ref:"communication", icon:"🗣️" },
+  { title:"Crisis & safety helplines (Kenya)", kind:"info", icon:"📞",
+    body:"If you are in immediate danger, call 999 or 112. For emotional crisis support in Kenya, Befrienders Kenya offers a confidential listening line. You deserve support, and reaching out is a sign of strength." },
+  { title:"When to seek professional help", kind:"info", icon:"💛",
+    body:"Consider booking a session if you feel persistently low, anxious or stuck; if past hurt keeps affecting your relationships; or simply if you'd value a steady, professional space to think. You don't need to be in crisis to deserve support." },
+];
+
 /* ---- Candidate pool ----
    Each has the attributes the matcher scores against. Photos are avatar
    initials + colour (no real people). "prefs" describes what they seek. */

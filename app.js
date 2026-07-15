@@ -15,6 +15,7 @@ const DEFAULT_STATE = {
   goals:[],
   learning:{ completed:{} },  // lessonId -> true
   wellness:{ moods:[], gratitude:[], checkins:[], affFav:[] },
+  counselling:{ bookings:[], questions:[], webinars:[], groups:[] },
   seededInbound:false,
 };
 
@@ -132,6 +133,37 @@ function dailyIndex(len){
   const d = new Date();
   const doy = Math.floor((d - new Date(d.getFullYear(),0,0)) / 86400000);
   return doy % len;
+}
+
+/* ---- Counsellor Support ---- */
+function couns(){
+  if(!S.counselling) S.counselling = {};
+  const c = S.counselling;
+  c.bookings ||= []; c.questions ||= []; c.webinars ||= []; c.groups ||= [];
+  return c;
+}
+const counsellorById = id => COUNSELLORS.find(c=>c.id===id);
+function addBooking(b){ couns().bookings.push({ id:"b"+Date.now(), ...b, ts:Date.now() }); save(); }
+function cancelBooking(id){ const c = couns(); c.bookings = c.bookings.filter(b=>b.id!==id); save(); }
+/* upcoming bookings sorted by date+time */
+function upcomingBookings(){
+  return couns().bookings.slice().sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
+}
+function toggleWebinar(id){ const w = couns().webinars; const i = w.indexOf(id); if(i>=0) w.splice(i,1); else w.push(id); save(); return i<0; }
+function toggleGroup(id){ const g = couns().groups; const i = g.indexOf(id); if(i>=0) g.splice(i,1); else g.push(id); save(); return i<0; }
+function addQuestion(text){
+  const q = { id:"q"+Date.now(), text, ts:Date.now(), reply:null };
+  couns().questions.unshift(q); save(); return q;
+}
+/* Human date for an offset (days from today) or an ISO yyyy-mm-dd */
+function fmtDate(d){
+  return d.toLocaleDateString([], { weekday:"short", day:"numeric", month:"short" });
+}
+function dateFromOffset(days){ const d = new Date(); d.setDate(d.getDate()+days); return d; }
+function next7Days(){
+  const out = [];
+  for(let i=1;i<=7;i++){ const d = dateFromOffset(i); out.push({ key:dateKey(d), label:d.toLocaleDateString([], {weekday:"short"}), day:d.getDate(), date:d }); }
+  return out;
 }
 
 /* ---------------- Compatibility matcher ---------------- */
@@ -579,7 +611,7 @@ route("home", ()=>{
     <div class="sec-h"><h3>Keep growing</h3></div>
     ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
     ${(()=>{ const m=moodToday(); const sub = m ? `Today: ${MOODS.find(x=>x.score===m.score)?.emoji} ${MOODS.find(x=>x.score===m.score)?.label} · tap to check in` : "Mood, gratitude, breathing & reflection"; return featureRow("wellness","🧘","Wellness Tools",sub); })()}
-    ${featureRow("feature/counsellor","🧑‍⚕️","Counsellor Support","Book a session, ask, or join a group")}
+    ${(()=>{ const up=upcomingBookings()[0]; const sub = up ? `Next: ${counsellorById(up.counsellor)?.name?.split(' ').slice(-1)} · ${fmtDate(new Date(up.date))}` : "Book a session, ask, or join a group"; return featureRow("counselling","🧑‍⚕️","Counsellor Support",sub); })()}
   </div>`,
   mount(root){
     $("#reflect",root).onclick = ()=> openReflection(WEEKLY_PROMPTS[new Date().getDay()%WEEKLY_PROMPTS.length]);
@@ -1039,7 +1071,7 @@ route("profile", ()=>{
     ${featureRow("feature/marriage","💍","Marriage Preparation","Stage 4 pathway")}
     ${featureRow("feature/community","🌍","Community Groups","Moderated groups by life stage")}
     ${featureRow("feature/events","📅","Events","Mixers, seminars & retreats")}
-    ${featureRow("feature/counsellor","🧑‍⚕️","Counsellor Support","Sessions, webinars & support groups")}
+    ${featureRow("counselling","🧑‍⚕️","Counsellor Support","Sessions, webinars & support groups")}
     ${featureRow("wellness","🧘","Wellness Tools","Mood, gratitude & reflection")}
     ${featureRow("feature/premium","⭐","Premium","Unlimited counselling & coaching")}
 
@@ -1310,7 +1342,7 @@ function openCheckinResult(avg){
     ${showBook?`<button class="btn" id="book">Talk to a counsellor</button>`:""}
     <button class="btn ${showBook?"ghost":""}" id="done" ${showBook?'style="margin-top:6px"':''}>Done</button>`);
   $("#done",box.el).onclick = ()=>{ box.close(); go("wellness"); };
-  const bk = $("#book",box.el); if(bk) bk.onclick = ()=>{ box.close(); toast("Opening Counsellor Support…"); go("feature","counsellor"); };
+  const bk = $("#book",box.el); if(bk) bk.onclick = ()=>{ box.close(); toast("Opening Counsellor Support…"); go("counselling"); };
 }
 
 /* relative time helper */
@@ -1324,6 +1356,290 @@ function relTime(ts){
   return new Date(ts).toLocaleDateString([], {day:"numeric", month:"short"});
 }
 
+/* ========================= Counsellor Support ========================= */
+
+/* ---- Counselling hub ---- */
+route("counselling", ()=>{
+  const up = upcomingBookings();
+  const q = couns().questions;
+  const wCount = couns().webinars.length, gCount = couns().groups.length;
+  const openQ = q.filter(x=>!x.reply).length;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Counsellor Support</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Professional support is with you throughout your journey — confidential and judgement-free.</p>
+
+    ${up.length ? `
+      <div class="sec-h"><h3>Your next session</h3><a href="#/book">Book another</a></div>
+      ${bookingCardHTML(up[0])}
+      ${up.length>1?`<p class="tiny faint center" style="margin-top:8px">+ ${up.length-1} more upcoming</p>`:""}
+    ` : `
+      <div class="card" style="margin-top:14px;text-align:center">
+        <div style="font-size:36px">🧑‍⚕️</div>
+        <b style="display:block;margin-top:6px">Book a counselling session</b>
+        <p class="tiny muted" style="margin:6px 0 14px">Refresher check-ins, individual or couples support — by video, phone or in person.</p>
+        <button class="btn" data-go2="book">Book a session</button>
+      </div>
+    `}
+
+    <div class="sec-h"><h3>Support</h3></div>
+    <div class="tool-grid">
+      <button class="tool-card" data-go2="book"><div class="tico">📅</div><b>Book a session</b><div class="sub">${up.length?up.length+" upcoming":"Video · phone · in person"}</div></button>
+      <button class="tool-card" data-go2="ask"><div class="tico">💬</div><b>Ask a question</b><div class="sub">${openQ?openQ+" awaiting reply":"Confidential"}</div></button>
+      <button class="tool-card" data-go2="webinars"><div class="tico">🎓</div><b>Webinars</b><div class="sub">${wCount?wCount+" registered":WEBINARS.length+" upcoming"}</div></button>
+      <button class="tool-card" data-go2="groups"><div class="tico">👥</div><b>Support groups</b><div class="sub">${gCount?gCount+" joined":SUPPORT_GROUPS.length+" groups"}</div></button>
+    </div>
+
+    <div class="sec-h"><h3>Upcoming webinars</h3><a href="#/webinars">See all</a></div>
+    ${WEBINARS.slice(0,2).map(w=>{
+      const on = couns().webinars.includes(w.id);
+      return `<div class="list-row" data-web="${w.id}">
+        <div class="lico">🎓</div>
+        <div class="grow"><b>${esc(w.title)}</b><div class="sub">${esc(w.by)} · ${fmtDate(dateFromOffset(w.inDays))} · ${w.time}</div></div>
+        ${on?`<span class="chip">✓ Going</span>`:`<span class="chev">›</span>`}
+      </div>`;
+    }).join("")}
+
+    <div class="sec-h"><h3>Resources</h3></div>
+    ${RESOURCES.map((r,i)=>`
+      <div class="list-row" data-res="${i}">
+        <div class="lico">${r.icon}</div>
+        <div class="grow"><b>${esc(r.title)}</b><div class="sub">${r.kind==="course"?"Academy course":"Read"}</div></div>
+        <div class="chev">›</div>
+      </div>`).join("")}
+    <div style="height:8px"></div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
+    $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
+    $$("[data-web]",root).forEach(el=> el.onclick = ()=> go("webinars"));
+    $$("[data-res]",root).forEach(el=> el.onclick = ()=>{
+      const r = RESOURCES[+el.dataset.res];
+      if(r.kind==="course") go("course", r.ref);
+      else openResource(r);
+    });
+  }};
+});
+
+function bookingCardHTML(b){
+  const cn = counsellorById(b.counsellor);
+  const st = SESSION_TYPES.find(s=>s.id===b.type);
+  const fmt = SESSION_FORMATS.find(f=>f.id===b.format);
+  return `
+  <div class="card">
+    <div class="row" style="gap:12px">
+      ${avatar(cn?.name, cn?.color, "sm")}
+      <div class="grow">
+        <b>${esc(st?.name||"Session")}</b>
+        <div class="tiny faint">${esc(cn?.name||"")} · ${st?.mins} min</div>
+      </div>
+      <span class="chip">${fmt?.icon||""} ${esc(fmt?.name||"")}</span>
+    </div>
+    <div class="callout teal" style="margin-top:12px">📅 ${fmtDate(new Date(b.date))} at ${b.time}</div>
+    <div class="row" style="gap:8px;margin-top:12px">
+      ${b.format==="video"?`<button class="btn sm" data-join="${b.id}" style="flex:1">🎥 Join video call</button>`:""}
+      <button class="btn sm secondary" data-cancel="${b.id}" style="flex:1">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function openResource(r){
+  const box = sheet(`
+    <div class="row" style="gap:10px"><span style="font-size:26px">${r.icon}</span><h3 class="grow">${esc(r.title)}</h3></div>
+    <p class="muted" style="margin:12px 0 16px">${esc(r.body||"")}</p>
+    <button class="btn" id="close">Close</button>`);
+  $("#close",box.el).onclick = box.close;
+}
+
+/* ---- Booking flow ---- */
+let bookDraft = { type:"refresher", counsellor:"cn1", format:"video", date:null, time:null };
+route("book", ()=>{
+  const days = next7Days();
+  if(!bookDraft.date) bookDraft.date = days[0].key;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Book a session</h2></div>
+  <div class="pad stack">
+    <div>
+      <span class="fld-lbl">Session type</span>
+      <div class="stack" style="margin-top:8px">
+        ${SESSION_TYPES.map(s=>`<button class="pickrow ${bookDraft.type===s.id?"on":""}" data-type="${s.id}">
+          <div class="grow" style="text-align:left"><b>${s.name}</b><div class="sub">${s.desc}</div></div>
+          <span class="chip tiny">${s.mins} min</span></button>`).join("")}
+      </div>
+    </div>
+
+    <div>
+      <span class="fld-lbl">Counsellor</span>
+      <div class="stack" style="margin-top:8px">
+        ${COUNSELLORS.map(c=>`<button class="pickrow ${bookDraft.counsellor===c.id?"on":""}" data-cn="${c.id}">
+          ${avatar(c.name,c.color,"sm")}
+          <div class="grow" style="text-align:left"><b>${esc(c.name)}</b><div class="sub">${esc(c.title)}</div></div></button>`).join("")}
+      </div>
+    </div>
+
+    <div>
+      <span class="fld-lbl">Format</span>
+      <div class="chips" style="margin-top:8px">
+        ${SESSION_FORMATS.map(f=>`<button class="chip select ${bookDraft.format===f.id?"on":""}" data-fmt="${f.id}">${f.icon} ${f.name}</button>`).join("")}
+      </div>
+    </div>
+
+    <div>
+      <span class="fld-lbl">Choose a day</span>
+      <div class="chips" style="margin-top:8px">
+        ${days.map(d=>`<button class="chip select daychip ${bookDraft.date===d.key?"on":""}" data-day="${d.key}">${d.label} ${d.day}</button>`).join("")}
+      </div>
+    </div>
+
+    <div>
+      <span class="fld-lbl">Choose a time</span>
+      <div class="chips" style="margin-top:8px">
+        ${SLOT_TIMES.map(t=>`<button class="chip select ${bookDraft.time===t?"on":""}" data-time="${t}">${t}</button>`).join("")}
+      </div>
+    </div>
+
+    <button class="btn" id="confirm">Confirm booking</button>
+    <p class="tiny faint center">You'll get a reminder before your session. You can cancel anytime.</p>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("counselling");
+    const rerender = ()=> render();
+    $$("[data-type]",root).forEach(b=> b.onclick = ()=>{ bookDraft.type=b.dataset.type; rerender(); });
+    $$("[data-cn]",root).forEach(b=> b.onclick = ()=>{ bookDraft.counsellor=b.dataset.cn; rerender(); });
+    $$("[data-fmt]",root).forEach(b=> b.onclick = ()=>{ bookDraft.format=b.dataset.fmt; rerender(); });
+    $$("[data-day]",root).forEach(b=> b.onclick = ()=>{ bookDraft.date=b.dataset.day; rerender(); });
+    $$("[data-time]",root).forEach(b=> b.onclick = ()=>{ bookDraft.time=b.dataset.time; rerender(); });
+    $("#confirm",root).onclick = ()=>{
+      if(!bookDraft.time){ toast("Please choose a time"); return; }
+      addBooking({ type:bookDraft.type, counsellor:bookDraft.counsellor, format:bookDraft.format, date:bookDraft.date, time:bookDraft.time });
+      const cn = counsellorById(bookDraft.counsellor);
+      bookDraft = { type:"refresher", counsellor:"cn1", format:"video", date:null, time:null };
+      toast(`Session booked with ${cn.name.split(" ").slice(-1)} ✓`);
+      go("counselling");
+    };
+  }};
+});
+
+/* ---- Confidential Q&A ---- */
+route("ask", ()=>{
+  const q = couns().questions;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Ask a question</h2></div>
+  <div class="pad">
+    <div class="callout teal">🔒 Confidential. Your questions are seen only by our counselling team.</div>
+    <div class="card" style="margin-top:12px">
+      <textarea class="input" id="qtext" placeholder="Ask anything — about healing, dating, boundaries, or how you're feeling." style="min-height:80px"></textarea>
+      <button class="btn" id="qsend" style="margin-top:12px">Send confidentially</button>
+    </div>
+    <div class="sec-h"><h3>${q.length?"Your questions":"How it works"}</h3></div>
+    ${q.length ? q.map(item=>`
+      <div class="card" style="margin-bottom:12px">
+        <div class="meta tiny faint" style="margin-bottom:6px">You · ${relTime(item.ts)}</div>
+        <p>${esc(item.text)}</p>
+        ${item.reply ? `
+          <div class="divider"></div>
+          <div class="row" style="gap:8px;align-items:flex-start">
+            <span style="font-size:18px">🧑‍⚕️</span>
+            <div><b class="tiny" style="color:var(--teal-700)">Counselling team</b>
+              <p class="tiny" style="margin-top:3px">${esc(item.reply)}</p></div>
+          </div>`
+        : `<div class="chip gold tiny" style="margin-top:10px;display:inline-block">⏳ Awaiting counsellor reply</div>`}
+      </div>`).join("")
+    : `<div class="empty"><div class="ico">💬</div><p>No questions yet. There's no such thing as a silly question here.</p></div>`}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("counselling");
+    $("#qsend",root).onclick = ()=>{
+      const t = $("#qtext",root).value.trim();
+      if(t.length<5){ toast("Please write your question first"); return; }
+      const q = addQuestion(t);
+      toast("Sent confidentially 💚");
+      render();
+      // simulated acknowledgement from the counselling team
+      setTimeout(()=>{
+        const item = couns().questions.find(x=>x.id===q.id);
+        if(item && !item.reply){
+          item.reply = QA_ACKS[couns().questions.length % QA_ACKS.length];
+          save(); updateBadge();
+          if(parseHash().name==="ask") render();
+          else toast("A counsellor replied to your question");
+        }
+      }, 3000);
+    };
+  }};
+});
+
+/* ---- Webinars ---- */
+route("webinars", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Webinars</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Live sessions with our counsellors. Register to get the link and a reminder.</p>
+    <div style="margin-top:14px">
+      ${WEBINARS.map(w=>{
+        const on = couns().webinars.includes(w.id);
+        return `<div class="card" style="margin-bottom:12px">
+          <div class="row between"><b>${esc(w.title)}</b><span class="chip ${on?"":"gold"}">${fmtDate(dateFromOffset(w.inDays))}</span></div>
+          <p class="tiny faint" style="margin:4px 0 8px">${esc(w.by)} · ${w.time}</p>
+          <p class="tiny">${esc(w.blurb)}</p>
+          <button class="btn sm ${on?"secondary":""}" data-reg="${w.id}" style="width:100%;margin-top:12px">${on?"✓ Registered — tap to cancel":"Register"}</button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("counselling");
+    $$("[data-reg]",root).forEach(b=> b.onclick = ()=>{
+      const now = toggleWebinar(b.dataset.reg);
+      toast(now?"Registered — see you there 🎓":"Registration cancelled");
+      render();
+    });
+  }
+}));
+
+/* ---- Support groups ---- */
+route("groups", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Support groups</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Moderated, confidential groups to grow alongside people in a similar season.</p>
+    <div style="margin-top:14px">
+      ${SUPPORT_GROUPS.map(g=>{
+        const on = couns().groups.includes(g.id);
+        return `<div class="card" style="margin-bottom:12px">
+          <div class="row" style="gap:12px">
+            <div class="lico" style="font-size:22px">${g.icon}</div>
+            <div class="grow"><b>${esc(g.name)}</b><div class="sub tiny faint">${esc(g.when)} · ${g.members + (on?1:0)} members</div>
+              <div class="tiny faint">Facilitated by ${esc(g.by)}</div></div>
+          </div>
+          <button class="btn sm ${on?"secondary":""}" data-join="${g.id}" style="width:100%;margin-top:12px">${on?"✓ Joined — tap to leave":"Join group"}</button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("counselling");
+    $$("[data-join]",root).forEach(b=> b.onclick = ()=>{
+      const now = toggleGroup(b.dataset.join);
+      toast(now?"Welcome to the group 👋":"You've left the group");
+      render();
+    });
+  }
+}));
+
+/* Booking join / cancel handlers are wired on the hub via delegation below */
+document.addEventListener("click", e=>{
+  const join = e.target.closest("[data-join]");
+  if(join && join.dataset.join && join.dataset.join.startsWith("b")){
+    toast("Connecting to your video session… 🎥");
+  }
+  const cancel = e.target.closest("[data-cancel]");
+  if(cancel){ cancelBooking(cancel.dataset.cancel); toast("Session cancelled"); render(); }
+});
+
 const FEATURES = {
   couple:   ["💑","Couple Space","A private shared space that unlocks once you and a partner mutually commit to a relationship.",
              ["Shared journal","Couple goals","Anniversary reminders","Budget planner","Reflection journal","Weekly check-ins","Date planner"]],
@@ -1333,8 +1649,6 @@ const FEATURES = {
              ["Singles preparing for marriage","Young professionals","Widows & widowers","Single parents","Retirement relationships","Faith-based enrichment"]],
   events:   ["📅","Events","Meet safely in real life at counsellor-hosted gatherings.",
              ["Singles mixers","Relationship seminars","Premarital workshops","Marriage enrichment retreats","Community service days"]],
-  counsellor:["🧑‍⚕️","Counsellor Support","Professional support is with you throughout the journey.",
-             ["Book refresher sessions","Video counselling","Attend webinars","Join support groups","Ask confidential questions","Educational resources"]],
   premium:  ["⭐","Premium","Go deeper with unlimited professional support.",
              ["Unlimited counsellor messaging","Video counselling","Compatibility insights","Exclusive webinars","Couples coaching","Advanced courses"]],
 };

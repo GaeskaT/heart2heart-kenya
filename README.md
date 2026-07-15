@@ -67,11 +67,26 @@ A private wellness hub with real, interactive tools, all persisted in
 
 Today's mood surfaces on the Home screen.
 
+### Counsellor Support (fully built)
+
+Professional support throughout the journey, all persisted in `localStorage`:
+
+- **Book a session** — choose session type (refresher, individual, couples,
+  quick call), a counsellor, a format (**video / phone / in person**), a day and
+  a time; upcoming sessions show on the hub and Home, with cancel and a
+  **Join video call** action for video bookings.
+- **Ask a question** — a confidential thread to the counselling team that
+  acknowledges each question (a counsellor follows up).
+- **Webinars** — register / cancel for live counsellor-led sessions.
+- **Support groups** — join / leave moderated groups by life season.
+- **Resources** — a small library that deep-links into Academy courses, plus
+  info cards (including Kenya crisis/safety helplines and when to seek help).
+
 ## What's stubbed (navigable placeholders)
 
 Presented as real, browsable screens describing what's inside, marked as roadmap:
 Stage 4 Marriage Preparation, Couple Space, Community Groups, Events,
-Counsellor Support, and Premium.
+and Premium.
 
 ## Files
 
