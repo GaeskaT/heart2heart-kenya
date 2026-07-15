@@ -97,6 +97,59 @@ const DATE_IDEAS = [
 
 /* Academy course + lesson content now lives in lessons.js (COURSES). */
 
+/* ---- Wellness Tools content ---- */
+const MOODS = [
+  { score:1, emoji:"😔", label:"Low" },
+  { score:2, emoji:"😕", label:"Down" },
+  { score:3, emoji:"😐", label:"Okay" },
+  { score:4, emoji:"🙂", label:"Good" },
+  { score:5, emoji:"😄", label:"Great" },
+];
+
+const AFFIRMATIONS = [
+  "I am worthy of a healthy, respectful love.",
+  "My peace does not depend on being chosen.",
+  "I can be soft and strong at the same time.",
+  "I am allowed to take relationships slowly.",
+  "My boundaries protect my well-being, and that is good.",
+  "I have grown, and I am still growing.",
+  "I bring value simply by being who I am.",
+  "I can feel a hard emotion without being ruled by it.",
+  "I deserve honesty, kindness and patience.",
+  "I am not defined by my past relationships.",
+  "It is safe for me to be fully myself.",
+  "I choose partners from wholeness, not from fear.",
+  "I trust myself to walk away from what harms me.",
+  "I am learning to receive love as freely as I give it.",
+  "Today, I offer myself the same grace I offer others.",
+  "I am becoming the partner I would want to meet.",
+];
+
+/* Faith-inclusive: a mix of prayer, gratitude and secular meditation prompts */
+const REFLECT_PROMPTS = [
+  { type:"Meditation", text:"Sit quietly for one minute. Notice three sounds around you, then how your body feels supported where you sit." },
+  { type:"Prayer",     text:"Give thanks for one person who has helped you heal. Hold them gently in your heart." },
+  { type:"Meditation", text:"Breathe slowly and silently repeat: 'I am here. I am safe. I am enough.'" },
+  { type:"Prayer",     text:"Ask for the wisdom to know your worth, and the courage to honour it." },
+  { type:"Meditation", text:"Picture the version of you a year from now, healed and steady. What would they thank you for today?" },
+  { type:"Prayer",     text:"Offer up any anxiety about the future, and receive peace for just this day." },
+  { type:"Meditation", text:"Place a hand on your heart. Feel it beating for you, faithfully, without being asked." },
+  { type:"Prayer",     text:"Bless the relationships in your life, and pray for grace in the ones still to come." },
+];
+
+const BREATH_PATTERNS = [
+  { id:"box",  name:"Box breathing",  hint:"Calm & focus",  phases:[["Breathe in",4],["Hold",4],["Breathe out",4],["Hold",4]] },
+  { id:"calm", name:"4–7–8 calm",     hint:"Ease anxiety",   phases:[["Breathe in",4],["Hold",7],["Breathe out",8]] },
+  { id:"soft", name:"Slow & soft",    hint:"Gentle reset",   phases:[["Breathe in",4],["Breathe out",6]] },
+];
+
+const CHECKIN_QUESTIONS = [
+  { id:"mood",       q:"How is your heart today?",              opts:["Struggling","Heavy","Okay","Steady","Bright"] },
+  { id:"sleep",      q:"How well have you been resting?",        opts:["Poorly","Not great","Fair","Well","Deeply"] },
+  { id:"connection", q:"How connected do you feel to others?",   opts:["Isolated","A little","Somewhat","Connected","Held"] },
+  { id:"self",       q:"How kind have you been to yourself?",    opts:["Harsh","Critical","Neutral","Gentle","Very kind"] },
+];
+
 /* ---- Candidate pool ----
    Each has the attributes the matcher scores against. Photos are avatar
    initials + colour (no real people). "prefs" describes what they seek. */

@@ -50,11 +50,28 @@ tracking, per-course and overall progress bars, a "continue learning" resume
 card, and a course-complete celebration. Progress persists in `localStorage` and
 rolls up onto the Home and Learn screens.
 
+### Wellness Tools (fully built)
+
+A private wellness hub with real, interactive tools, all persisted in
+`localStorage`:
+
+- **Mood tracker** — daily emoji check-in with an optional note, a rolling
+  7-day mood trend chart, and a daily streak.
+- **Guided breathing** — an animated breathing orb with three patterns (box,
+  4-7-8, slow & soft) that expands and contracts through timed phases.
+- **Gratitude journal** — add and browse dated entries.
+- **Daily affirmations** — a rotating affirmation you can shuffle and favourite.
+- **Prayer & meditation prompts** — faith-inclusive reflection prompts.
+- **Wellness check-in** — a short self-review that responds with a compassionate
+  summary and, on low scores, gently offers a route to counsellor support.
+
+Today's mood surfaces on the Home screen.
+
 ## What's stubbed (navigable placeholders)
 
 Presented as real, browsable screens describing what's inside, marked as roadmap:
-Stage 4 Marriage Preparation, Couple Space, Community Groups, Events, Wellness
-Tools, Counsellor Support, and Premium.
+Stage 4 Marriage Preparation, Couple Space, Community Groups, Events,
+Counsellor Support, and Premium.
 
 ## Files
 

@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   connections:{},   // candidateId -> {status, messages:[], unread}
   goals:[],
   learning:{ completed:{} },  // lessonId -> true
+  wellness:{ moods:[], gratitude:[], checkins:[], affFav:[] },
   seededInbound:false,
 };
 
@@ -82,6 +83,55 @@ function academyTotals(){
 /* First not-yet-done lesson across a course, else first lesson */
 function nextLessonOf(course){
   return course.lessons.find(l => !lessonDone(l.id)) || course.lessons[0];
+}
+
+/* ---- Wellness ---- */
+function well(){
+  if(!S.wellness) S.wellness = {};
+  const w = S.wellness;
+  w.moods ||= []; w.gratitude ||= []; w.checkins ||= []; w.affFav ||= [];
+  return w;
+}
+function dateKey(d){ // local YYYY-MM-DD
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+const todayKey = () => dateKey(new Date());
+const moodToday = () => well().moods.find(m => m.d === todayKey());
+function logMood(score, note){
+  const w = well(); const k = todayKey();
+  let m = w.moods.find(x => x.d === k);
+  if(m){ m.score = score; if(note!=null) m.note = note; m.ts = Date.now(); }
+  else { m = { d:k, score, note:note||"", ts:Date.now() }; w.moods.push(m); }
+  save(); return m;
+}
+/* last N days as {key, dayLabel, mood|null}, oldest -> newest */
+function moodTrend(n=7){
+  const w = well(); const out = [];
+  const names = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+  for(let i=n-1; i>=0; i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const k = dateKey(d);
+    out.push({ key:k, day:names[d.getDay()], mood:w.moods.find(m=>m.d===k)||null });
+  }
+  return out;
+}
+function moodStreak(){
+  const w = well(); let streak = 0;
+  for(let i=0;;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    if(w.moods.some(m=>m.d===dateKey(d))) streak++;
+    else break;
+  }
+  return streak;
+}
+function addGratitude(text){ well().gratitude.unshift({ ts:Date.now(), text }); save(); }
+function addCheckin(answers, note){ well().checkins.unshift({ ts:Date.now(), answers, note:note||"" }); save(); }
+/* Daily index into an array, stable per calendar day */
+function dailyIndex(len){
+  const d = new Date();
+  const doy = Math.floor((d - new Date(d.getFullYear(),0,0)) / 86400000);
+  return doy % len;
 }
 
 /* ---------------- Compatibility matcher ---------------- */
@@ -528,7 +578,7 @@ route("home", ()=>{
 
     <div class="sec-h"><h3>Keep growing</h3></div>
     ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
-    ${featureRow("feature/wellness","🧘","Wellness Tools","Mood, gratitude, breathing & reflection")}
+    ${(()=>{ const m=moodToday(); const sub = m ? `Today: ${MOODS.find(x=>x.score===m.score)?.emoji} ${MOODS.find(x=>x.score===m.score)?.label} · tap to check in` : "Mood, gratitude, breathing & reflection"; return featureRow("wellness","🧘","Wellness Tools",sub); })()}
     ${featureRow("feature/counsellor","🧑‍⚕️","Counsellor Support","Book a session, ask, or join a group")}
   </div>`,
   mount(root){
@@ -990,7 +1040,7 @@ route("profile", ()=>{
     ${featureRow("feature/community","🌍","Community Groups","Moderated groups by life stage")}
     ${featureRow("feature/events","📅","Events","Mixers, seminars & retreats")}
     ${featureRow("feature/counsellor","🧑‍⚕️","Counsellor Support","Sessions, webinars & support groups")}
-    ${featureRow("feature/wellness","🧘","Wellness Tools","Mood, gratitude & reflection")}
+    ${featureRow("wellness","🧘","Wellness Tools","Mood, gratitude & reflection")}
     ${featureRow("feature/premium","⭐","Premium","Unlimited counselling & coaching")}
 
     <div class="sec-h"><h3>Account</h3></div>
@@ -1011,6 +1061,269 @@ route("profile", ()=>{
 });
 
 /* ---- Feature placeholders ---- */
+/* ============================ Wellness Tools ============================ */
+
+/* ---- Wellness hub ---- */
+route("wellness", ()=>{
+  const m = moodToday();
+  const aff = AFFIRMATIONS[dailyIndex(AFFIRMATIONS.length)];
+  const prompt = REFLECT_PROMPTS[dailyIndex(REFLECT_PROMPTS.length)];
+  const trend = moodTrend(7);
+  const streak = moodStreak();
+  const grat = well().gratitude;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Wellness Tools</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Small daily practices for a steady, healthy heart. Everything here is private to you.</p>
+
+    <div class="card" style="margin-top:14px">
+      <div class="row between"><b>How is your heart today?</b>${streak>0?`<span class="chip">🔥 ${streak}-day streak</span>`:""}</div>
+      <div class="mood-row" id="moodrow">
+        ${MOODS.map(mo=>`<button class="mood-btn ${m&&m.score===mo.score?"on":""}" data-score="${mo.score}">
+          <span class="e">${mo.emoji}</span><span class="l">${mo.label}</span></button>`).join("")}
+      </div>
+      ${m?`<textarea class="input" id="moodnote" placeholder="Add a note about today (optional)" style="margin-top:12px;min-height:56px">${esc(m.note||"")}</textarea>`:""}
+    </div>
+
+    <div class="sec-h"><h3>Your week</h3><span class="tiny faint">mood trend</span></div>
+    <div class="card">
+      <div class="trend">
+        ${trend.map(t=>{
+          const h = t.mood ? 20 + t.mood.score*15 : 6;
+          return `<div class="col"><div class="stalk ${t.mood?"":"empty"}" style="height:${h}%"></div><div class="day">${t.day}</div></div>`;
+        }).join("")}
+      </div>
+      ${well().moods.length===0?`<p class="tiny faint center" style="margin-top:8px">Log your mood daily to see your trend grow.</p>`:""}
+    </div>
+
+    <div class="sec-h"><h3>Tools</h3></div>
+    <div class="tool-grid">
+      <button class="tool-card" data-go2="breathing"><div class="tico">🌬️</div><b>Guided breathing</b><div class="sub">Calm in a few breaths</div></button>
+      <button class="tool-card" data-go2="gratitude"><div class="tico">🙏</div><b>Gratitude journal</b><div class="sub">${grat.length?grat.length+" entries":"Start today"}</div></button>
+      <button class="tool-card" data-go2="checkin"><div class="tico">📝</div><b>Wellness check-in</b><div class="sub">A gentle self-review</div></button>
+      <button class="tool-card" id="prayercard"><div class="tico">${prompt.type==="Prayer"?"✨":"🧘"}</div><b>${prompt.type} prompt</b><div class="sub">Tap for a new one</div></button>
+    </div>
+
+    <div class="sec-h"><h3>Today's affirmation</h3></div>
+    <div class="affirm">
+      <div class="txt" id="afftext">"${esc(aff)}"</div>
+      <div class="acts">
+        <button class="ib" id="afffav" title="Save">🤍</button>
+        <button class="ib" id="affnext" title="Another">🔄</button>
+      </div>
+    </div>
+
+    <div class="sec-h"><h3>${prompt.type} & meditation</h3></div>
+    <div class="card" id="promptcard">
+      <div class="row" style="gap:10px;align-items:flex-start">
+        <span style="font-size:22px">${prompt.type==="Prayer"?"✨":"🧘"}</span>
+        <div><span class="chip tiny" style="margin-bottom:6px;display:inline-block">${prompt.type}</span>
+          <p id="prompttext">${esc(prompt.text)}</p></div>
+      </div>
+    </div>
+
+    ${grat.length?`<div class="sec-h"><h3>Recent gratitude</h3><a href="#/gratitude">See all</a></div>
+      ${grat.slice(0,2).map(g=>`<div class="entry"><div class="meta">${relTime(g.ts)}</div>${esc(g.text)}</div>`).join("")}`:""}
+    <div style="height:8px"></div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
+    $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
+
+    // mood logging
+    $$("#moodrow .mood-btn",root).forEach(b=> b.onclick = ()=>{
+      logMood(+b.dataset.score);
+      toast("Mood logged 💚");
+      render();  // refresh trend, streak, note field
+    });
+    const note = $("#moodnote",root);
+    if(note) note.onchange = ()=>{ const cur = moodToday(); if(cur){ logMood(cur.score, note.value); toast("Note saved"); } };
+
+    // affirmation
+    let affIdx = dailyIndex(AFFIRMATIONS.length);
+    const fav = $("#afffav",root);
+    const syncFav = ()=> fav.textContent = well().affFav.includes(affIdx) ? "💚" : "🤍";
+    syncFav();
+    $("#affnext",root).onclick = ()=>{ affIdx = (affIdx+1)%AFFIRMATIONS.length; $("#afftext",root).textContent = `"${AFFIRMATIONS[affIdx]}"`; syncFav(); };
+    fav.onclick = ()=>{ const f = well().affFav; const i = f.indexOf(affIdx);
+      if(i>=0) f.splice(i,1); else f.push(affIdx); save(); syncFav(); toast(i>=0?"Removed":"Saved to favourites 💚"); };
+
+    // rotating reflection prompt
+    let pIdx = dailyIndex(REFLECT_PROMPTS.length);
+    const nextPrompt = ()=>{ pIdx=(pIdx+1)%REFLECT_PROMPTS.length; const p=REFLECT_PROMPTS[pIdx]; $("#prompttext",root).textContent = p.text; };
+    $("#prayercard",root).onclick = nextPrompt;
+  }};
+});
+
+/* ---- Guided breathing (animated) ---- */
+let breathPattern = "box";
+route("breathing", ()=>{
+  const pat = BREATH_PATTERNS.find(p=>p.id===breathPattern) || BREATH_PATTERNS[0];
+  return {
+  html:`
+  <div class="breathe-stage">
+    <div class="row between" style="width:100%">
+      <button class="back" data-act="back" style="color:#fff">←</button>
+      <b>${pat.name}</b>
+      <span style="width:34px"></span>
+    </div>
+
+    <div class="breathe-orb-wrap">
+      <div style="position:relative;display:grid;place-items:center">
+        <div class="ring2"></div>
+        <div class="breathe-orb" id="orb"></div>
+      </div>
+      <div>
+        <div class="breathe-phase" id="phase">Ready?</div>
+        <div class="breathe-count" id="count">Follow the circle. In through the nose, out through the mouth.</div>
+      </div>
+    </div>
+
+    <div style="width:100%">
+      <div class="breathe-pattern-pick" id="picker">
+        ${BREATH_PATTERNS.map(p=>`<button class="p ${p.id===breathPattern?"on":""}" data-pat="${p.id}"><b>${p.name}</b><br><span>${p.hint}</span></button>`).join("")}
+      </div>
+      <button class="btn secondary" id="toggle" style="margin-top:14px;background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)">Begin</button>
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("wellness");
+    const orb = $("#orb",root), phaseEl = $("#phase",root), countEl = $("#count",root), toggle = $("#toggle",root);
+    let running = false, timers = [], cycles = 0;
+
+    const clearTimers = ()=>{ timers.forEach(clearTimeout); timers = []; };
+    const stop = (msg)=>{
+      running = false; clearTimers();
+      orb.style.transition = "transform .8s ease"; orb.style.transform = "scale(.62)";
+      phaseEl.textContent = msg || "Paused";
+      toggle.textContent = "Begin";
+    };
+    const runPhase = (i)=>{
+      if(!running) return;
+      const pat = BREATH_PATTERNS.find(p=>p.id===breathPattern);
+      const [label, secs] = pat.phases[i];
+      phaseEl.textContent = label;
+      countEl.textContent = `Cycle ${cycles+1}`;
+      // scale target: in -> big, out -> small, hold -> keep
+      const big = 1.0, small = .62;
+      let target = orb.style.transform;
+      if(/in/i.test(label)) target = `scale(${big})`;
+      else if(/out/i.test(label)) target = `scale(${small})`;
+      orb.style.transition = `transform ${secs}s ease-in-out`;
+      orb.style.transform = target;
+      timers.push(setTimeout(()=>{
+        let ni = i+1;
+        if(ni >= pat.phases.length){ ni = 0; cycles++; }
+        runPhase(ni);
+      }, secs*1000));
+    };
+    const start = ()=>{
+      running = true; cycles = 0; toggle.textContent = "Stop";
+      runPhase(0);
+    };
+    toggle.onclick = ()=>{ running ? stop("Well done 🌿") : start(); };
+    $$("#picker .p",root).forEach(b=> b.onclick = ()=>{
+      breathPattern = b.dataset.pat;
+      stop(); render();  // re-render to reflect selected pattern
+    });
+  }};
+});
+
+/* ---- Gratitude journal ---- */
+route("gratitude", ()=>{
+  const g = well().gratitude;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Gratitude journal</h2></div>
+  <div class="pad">
+    <div class="card">
+      <label class="field"><span>What are you grateful for today?</span>
+        <textarea class="input" id="gtext" placeholder="However small — a kind word, a good cup of chai, a moment of peace." style="min-height:74px"></textarea></label>
+      <button class="btn" id="gadd" style="margin-top:12px">Add to journal</button>
+    </div>
+    <div class="sec-h"><h3>${g.length?`${g.length} ${g.length===1?"entry":"entries"}`:"Your entries"}</h3></div>
+    <div id="glist">
+      ${g.length ? g.map(e=>`<div class="entry"><div class="meta">${relTime(e.ts)}</div>${esc(e.text)}</div>`).join("")
+        : `<div class="empty"><div class="ico">🙏</div><p>No entries yet.<br>Gratitude, practised daily, rewires how we see.</p></div>`}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("wellness");
+    $("#gadd",root).onclick = ()=>{
+      const t = $("#gtext",root).value.trim();
+      if(t.length<2){ toast("Write a little something first 🙂"); return; }
+      addGratitude(t); toast("Added to your journal 💚"); render();
+    };
+  }};
+});
+
+/* ---- Wellness check-in ---- */
+route("checkin", ()=>{
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Wellness check-in</h2></div>
+  <div class="pad stack">
+    <p class="muted tiny">A gentle, private self-review. There are no wrong answers — just honesty.</p>
+    ${CHECKIN_QUESTIONS.map(q=>`
+      <div class="card">
+        <p style="font-weight:600">${q.q}</p>
+        <div class="likert" data-q="${q.id}">
+          ${q.opts.map((o,i)=>`<button data-v="${i+1}" title="${esc(o)}">${i+1}</button>`).join("")}
+        </div>
+        <div class="likert-legend"><span>${esc(q.opts[0])}</span><span>${esc(q.opts[q.opts.length-1])}</span></div>
+      </div>`).join("")}
+    <label class="field"><span>Anything else on your heart? (optional)</span>
+      <textarea class="input" id="cnote" placeholder="Write freely — just for you."></textarea></label>
+    <button class="btn" id="csave">Complete check-in</button>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("wellness");
+    $$(".likert",root).forEach(row=> row.querySelectorAll("button").forEach(b=> b.onclick = ()=>{
+      row.querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+    }));
+    $("#csave",root).onclick = ()=>{
+      const answers = {};
+      let missing = false;
+      $$(".likert",root).forEach(row=>{
+        const on = row.querySelector("button.on");
+        if(!on){ missing = true; } else answers[row.dataset.q] = +on.dataset.v;
+      });
+      if(missing){ toast("Please answer each question"); return; }
+      addCheckin(answers, $("#cnote",root).value.trim());
+      const avg = Object.values(answers).reduce((a,b)=>a+b,0)/Object.values(answers).length;
+      openCheckinResult(avg);
+    };
+  }};
+});
+function openCheckinResult(avg){
+  const msg = avg>=4 ? ["You're in a good place 🌟","Keep tending what's working. You've earned this steadiness."]
+            : avg>=3 ? ["You're doing okay 🌤️","Some things feel steady, some heavier. Be gentle with yourself today."]
+                     : ["A tender season 💛","Thank you for checking in honestly. Consider reaching out — a counsellor or a friend."];
+  const showBook = avg < 3;
+  const box = sheet(`
+    <div class="center">
+      <div style="font-size:40px">${avg>=4?"🌟":avg>=3?"🌤️":"💛"}</div>
+      <h3 style="margin-top:6px">${msg[0]}</h3>
+      <p class="muted" style="margin:8px 0 16px">${msg[1]}</p>
+    </div>
+    ${showBook?`<button class="btn" id="book">Talk to a counsellor</button>`:""}
+    <button class="btn ${showBook?"ghost":""}" id="done" ${showBook?'style="margin-top:6px"':''}>Done</button>`);
+  $("#done",box.el).onclick = ()=>{ box.close(); go("wellness"); };
+  const bk = $("#book",box.el); if(bk) bk.onclick = ()=>{ box.close(); toast("Opening Counsellor Support…"); go("feature","counsellor"); };
+}
+
+/* relative time helper */
+function relTime(ts){
+  const s = Math.floor((Date.now()-ts)/1000);
+  if(s<60) return "just now";
+  const m = Math.floor(s/60); if(m<60) return `${m} min ago`;
+  const h = Math.floor(m/60); if(h<24) return `${h} hr ago`;
+  const d = Math.floor(h/24); if(d===1) return "yesterday";
+  if(d<7) return `${d} days ago`;
+  return new Date(ts).toLocaleDateString([], {day:"numeric", month:"short"});
+}
+
 const FEATURES = {
   couple:   ["💑","Couple Space","A private shared space that unlocks once you and a partner mutually commit to a relationship.",
              ["Shared journal","Couple goals","Anniversary reminders","Budget planner","Reflection journal","Weekly check-ins","Date planner"]],
@@ -1022,8 +1335,6 @@ const FEATURES = {
              ["Singles mixers","Relationship seminars","Premarital workshops","Marriage enrichment retreats","Community service days"]],
   counsellor:["🧑‍⚕️","Counsellor Support","Professional support is with you throughout the journey.",
              ["Book refresher sessions","Video counselling","Attend webinars","Join support groups","Ask confidential questions","Educational resources"]],
-  wellness: ["🧘","Wellness Tools","Small daily practices for a steady, healthy heart.",
-             ["Mood tracker","Gratitude journal","Guided breathing","Daily affirmations","Prayer & meditation prompts","Mental wellness check-ins"]],
   premium:  ["⭐","Premium","Go deeper with unlimited professional support.",
              ["Unlimited counsellor messaging","Video counselling","Compatibility insights","Exclusive webinars","Couples coaching","Advanced courses"]],
 };

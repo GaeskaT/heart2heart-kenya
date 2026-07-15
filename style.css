@@ -277,3 +277,56 @@ textarea.input{ resize:vertical; min-height:84px; }
 .kv .k{ color:var(--ink-faint); }
 .fade-in{ animation:fade .3s ease both; }
 @keyframes fade{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none; } }
+
+/* ---------- Wellness: tool grid ---------- */
+.tool-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.tool-card{ background:#fff; border-radius:var(--radius); box-shadow:var(--shadow-sm); padding:16px; text-align:left; }
+.tool-card .tico{ font-size:26px; }
+.tool-card b{ display:block; margin-top:8px; font-size:14.5px; }
+.tool-card .sub{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+
+/* ---------- Mood selector ---------- */
+.mood-row{ display:flex; justify-content:space-between; gap:6px; margin-top:12px; }
+.mood-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; border-radius:14px;
+  border:1.5px solid transparent; transition:.12s; }
+.mood-btn .e{ font-size:26px; filter:grayscale(.35) opacity(.8); transition:.12s; }
+.mood-btn .l{ font-size:10.5px; color:var(--ink-faint); font-weight:600; }
+.mood-btn.on{ background:var(--teal-50); border-color:var(--teal-600); }
+.mood-btn.on .e{ filter:none; transform:scale(1.12); }
+.mood-btn.on .l{ color:var(--teal-700); }
+
+/* ---------- Mood 7-day trend ---------- */
+.trend{ display:flex; align-items:flex-end; gap:6px; height:88px; margin-top:6px; }
+.trend .col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; height:100%; justify-content:flex-end; }
+.trend .stalk{ width:60%; max-width:20px; border-radius:6px 6px 3px 3px; background:linear-gradient(180deg,var(--teal-500,#12857f),var(--teal-700));
+  min-height:4px; transition:height .4s; }
+.trend .stalk.empty{ background:var(--line); }
+.trend .day{ font-size:10px; color:var(--ink-faint); }
+
+/* ---------- Guided breathing ---------- */
+.breathe-stage{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+  padding:28px 24px 40px; color:#fff; text-align:center;
+  background:radial-gradient(120% 90% at 50% 20%, #12857f 0%, #0f6f6a 45%, #0a4b47 100%); }
+.breathe-orb-wrap{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; width:100%; }
+.breathe-orb{ width:150px; height:150px; border-radius:50%; display:grid; place-items:center;
+  background:radial-gradient(circle at 40% 35%, rgba(255,255,255,.55), rgba(255,255,255,.14));
+  box-shadow:0 0 60px rgba(255,255,255,.25); transform:scale(.62); transition:transform linear; }
+.breathe-orb .ring2{ position:absolute; width:150px; height:150px; border-radius:50%; border:2px solid rgba(255,255,255,.25); }
+.breathe-phase{ font-size:24px; font-weight:600; letter-spacing:.3px; min-height:30px; }
+.breathe-count{ font-size:15px; opacity:.85; }
+.breathe-pattern-pick{ display:flex; gap:8px; width:100%; }
+.breathe-pattern-pick .p{ flex:1; padding:12px 8px; border-radius:14px; background:rgba(255,255,255,.12);
+  border:1.5px solid transparent; color:#fff; }
+.breathe-pattern-pick .p.on{ background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.6); }
+.breathe-pattern-pick .p b{ font-size:13.5px; } .breathe-pattern-pick .p span{ font-size:11px; opacity:.85; }
+
+/* ---------- Journal entries ---------- */
+.entry{ background:#fff; border-radius:var(--radius); box-shadow:var(--shadow-sm); padding:14px 16px; }
+.entry + .entry{ margin-top:10px; }
+.entry .meta{ font-size:11.5px; color:var(--ink-faint); margin-bottom:5px; }
+
+/* ---------- Affirmation card ---------- */
+.affirm{ background:linear-gradient(135deg,#e0a44b,#e2674f); color:#fff; border-radius:var(--radius-lg); padding:24px 22px; text-align:center; }
+.affirm .txt{ font-size:20px; font-weight:600; line-height:1.35; }
+.affirm .acts{ display:flex; justify-content:center; gap:10px; margin-top:16px; }
+.affirm .ib{ width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.2); display:grid; place-items:center; font-size:18px; color:#fff; }
