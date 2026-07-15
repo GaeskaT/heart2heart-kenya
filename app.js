@@ -16,6 +16,11 @@ const DEFAULT_STATE = {
   learning:{ completed:{} },  // lessonId -> true
   wellness:{ moods:[], gratitude:[], checkins:[], affFav:[] },
   counselling:{ bookings:[], questions:[], webinars:[], groups:[] },
+  couple:{ active:false, partnerId:null, since:null, journal:[], goals:[], dates:[], budget:[], checkins:[] },
+  marriage:{ done:{} },
+  community:{ joined:[], posts:{} },
+  events:{ rsvp:[] },
+  premium:{ plan:"free" },
   seededInbound:false,
 };
 
@@ -165,6 +170,65 @@ function next7Days(){
   for(let i=1;i<=7;i++){ const d = dateFromOffset(i); out.push({ key:dateKey(d), label:d.toLocaleDateString([], {weekday:"short"}), day:d.getDate(), date:d }); }
   return out;
 }
+
+/* ---- Couple Space ---- */
+function cpl(){
+  if(!S.couple) S.couple = {};
+  const c = S.couple;
+  c.journal ||= []; c.goals ||= []; c.dates ||= []; c.budget ||= []; c.checkins ||= [];
+  return c;
+}
+const connectedPartners = () => CANDIDATES.filter(c => conn(c.id).status === "connected");
+function commitCouple(partnerId){
+  const c = cpl();
+  c.active = true; c.partnerId = partnerId; c.since = todayKey();
+  save();
+}
+function endCouple(){ S.couple = { active:false, partnerId:null, since:null, journal:[], goals:[], dates:[], budget:[], checkins:[] }; save(); }
+function daysTogether(){
+  const c = cpl(); if(!c.since) return 0;
+  return Math.max(0, Math.round((new Date(todayKey()) - new Date(c.since)) / 86400000));
+}
+function budgetTotals(){
+  const c = cpl();
+  let income = 0, expense = 0;
+  c.budget.forEach(b => b.type==="income" ? income += b.amount : expense += b.amount);
+  return { income, expense, balance: income - expense };
+}
+
+/* ---- Marriage prep ---- */
+function marriageDone(){ if(!S.marriage) S.marriage = {done:{}}; if(!S.marriage.done) S.marriage.done={}; return S.marriage.done; }
+function marriageProgress(){
+  const d = marriageDone(); const done = MARRIAGE_TOPICS.filter(t=>d[t.id]).length;
+  return { done, total:MARRIAGE_TOPICS.length, pct: Math.round(done/MARRIAGE_TOPICS.length*100) };
+}
+
+/* ---- Community ---- */
+function community(){
+  if(!S.community) S.community = {};
+  S.community.joined ||= []; S.community.posts ||= {};
+  return S.community;
+}
+function communityPosts(groupId){
+  const g = COMMUNITY_GROUPS.find(x=>x.id===groupId);
+  const seeded = (g?.seed || []).map((s,i)=>({ id:"seed"+groupId+i, a:s.a, t:s.t, ts:Date.now()-s.d*86400000, seeded:true }));
+  const mine = (community().posts[groupId] || []);
+  return [...mine, ...seeded].sort((a,b)=> b.ts - a.ts);
+}
+function addCommunityPost(groupId, text){
+  const c = community();
+  (c.posts[groupId] ||= []).push({ id:"p"+Date.now(), a:(S.user?.name||"You"), t:text, ts:Date.now(), mine:true });
+  save();
+}
+function toggleCommunity(id){ const j = community().joined; const i = j.indexOf(id); if(i>=0) j.splice(i,1); else j.push(id); save(); return i<0; }
+
+/* ---- Events ---- */
+function eventsState(){ if(!S.events) S.events = {rsvp:[]}; S.events.rsvp ||= []; return S.events; }
+function toggleRSVP(id){ const r = eventsState().rsvp; const i = r.indexOf(id); if(i>=0) r.splice(i,1); else r.push(id); save(); return i<0; }
+
+/* ---- Premium ---- */
+function currentPlan(){ if(!S.premium) S.premium = {plan:"free"}; return S.premium.plan || "free"; }
+function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save(); }
 
 /* ---------------- Compatibility matcher ---------------- */
 const INTENTION_RANK = { exploring:0, committed:1, marriage:2 };
@@ -1067,13 +1131,13 @@ route("profile", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your journey</h3></div>
-    ${featureRow("feature/couple","💑","Couple Space","Unlocks when you both commit")}
-    ${featureRow("feature/marriage","💍","Marriage Preparation","Stage 4 pathway")}
-    ${featureRow("feature/community","🌍","Community Groups","Moderated groups by life stage")}
-    ${featureRow("feature/events","📅","Events","Mixers, seminars & retreats")}
+    ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
+    ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
+    ${(()=>{ const n=community().joined.length; const sub = n?`${n} group${n>1?"s":""} joined`:"Moderated groups by life stage"; return featureRow("community","🌍","Community Groups",sub); })()}
+    ${(()=>{ const n=eventsState().rsvp.length; const sub = n?`${n} event${n>1?"s":""} · you're going`:"Mixers, seminars & retreats"; return featureRow("events","📅","Events",sub); })()}
     ${featureRow("counselling","🧑‍⚕️","Counsellor Support","Sessions, webinars & support groups")}
     ${featureRow("wellness","🧘","Wellness Tools","Mood, gratitude & reflection")}
-    ${featureRow("feature/premium","⭐","Premium","Unlimited counselling & coaching")}
+    ${(()=>{ const pl=PREMIUM_PLANS.find(p=>p.id===currentPlan()); const sub = currentPlan()!=="free"?`${pl.name} plan · active`:"Unlimited counselling & coaching"; return featureRow("premium","⭐","Premium",sub); })()}
 
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
@@ -1640,38 +1704,437 @@ document.addEventListener("click", e=>{
   if(cancel){ cancelBooking(cancel.dataset.cancel); toast("Session cancelled"); render(); }
 });
 
-const FEATURES = {
-  couple:   ["💑","Couple Space","A private shared space that unlocks once you and a partner mutually commit to a relationship.",
-             ["Shared journal","Couple goals","Anniversary reminders","Budget planner","Reflection journal","Weekly check-ins","Date planner"]],
-  marriage: ["💍","Marriage Preparation","When you're both ready, unlock a guided pathway toward marriage.",
-             ["Financial planning","Conflict management","Family expectations","Parenting discussions","Sexual health education","Legal aspects of marriage","Wedding planning checklist"]],
-  community:["🌍","Community Groups","Moderated discussion groups to grow alongside people in a similar season.",
-             ["Singles preparing for marriage","Young professionals","Widows & widowers","Single parents","Retirement relationships","Faith-based enrichment"]],
-  events:   ["📅","Events","Meet safely in real life at counsellor-hosted gatherings.",
-             ["Singles mixers","Relationship seminars","Premarital workshops","Marriage enrichment retreats","Community service days"]],
-  premium:  ["⭐","Premium","Go deeper with unlimited professional support.",
-             ["Unlimited counsellor messaging","Video counselling","Compatibility insights","Exclusive webinars","Couples coaching","Advanced courses"]],
-};
-route("feature", (key)=>{
-  const f = FEATURES[key]; if(!f) return go("home");
+/* ============================ Couple Space ============================ */
+route("couple", ()=>{
+  const c = cpl();
+  if(!c.active) return coupleGate();
+  const p = candidate(c.partnerId);
+  const prompt = COUPLE_PROMPTS[dailyIndex(COUPLE_PROMPTS.length)];
+  const bt = budgetTotals();
   return {
   html:`
-  <div class="topbar"><button class="back" data-act="back">←</button><h2>${f[1]}</h2></div>
-  <div class="pad stack center">
-    <div style="font-size:52px">${f[0]}</div>
-    <h2>${f[1]}</h2>
-    <p class="muted" style="max-width:34ch;margin:0 auto">${f[2]}</p>
-    ${key==="premium"?`<div class="chip gold">Premium</div>`:""}
-    <div class="card" style="text-align:left;width:100%">
-      <p class="tiny faint" style="margin-bottom:10px">WHAT'S INSIDE</p>
-      <div class="stack">${f[3].map(x=>`<div class="row"><span class="k" style="color:var(--teal-600);font-weight:800">•</span><span>${x}</span></div>`).join("")}</div>
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Couple Space</h2>
+    <button class="back" data-act="settings">⋯</button></div>
+  <div class="pad">
+    <div class="card" style="background:linear-gradient(135deg,#12857f,#0a4b47);color:#fff">
+      <div class="row" style="gap:6px;justify-content:center">
+        ${avatar(S.user.name,S.user.color,"lg")}
+        <span style="font-size:22px;align-self:center">💚</span>
+        ${avatar(p?.name,p?.color,"lg")}
+      </div>
+      <div class="center" style="margin-top:12px">
+        <b>${esc(S.user.name)} & ${esc(p?.name||"Partner")}</b>
+        <p class="tiny" style="opacity:.9">Together since ${fmtDate(new Date(c.since))} · ${daysTogether()} day${daysTogether()===1?"":"s"}</p>
+      </div>
     </div>
-    <div class="callout teal" style="text-align:left">🚧 This area is part of the full experience and is on the roadmap after the core-journey release.</div>
-    <button class="btn" id="notify">Notify me when it's ready</button>
+
+    <div class="callout gold" style="margin-top:12px">🎉 ${anniversaryNote(c)}</div>
+
+    <div class="sec-h"><h3>This week, together</h3></div>
+    <div class="prompt-card">
+      <div class="kicker">Conversation prompt</div>
+      <div class="q">"${esc(prompt)}"</div>
+    </div>
+
+    <div class="sec-h"><h3>Your space</h3></div>
+    <div class="tool-grid">
+      <button class="tool-card" data-go2="couple-journal"><div class="tico">📔</div><b>Shared journal</b><div class="sub">${c.journal.length?c.journal.length+" entries":"Write together"}</div></button>
+      <button class="tool-card" data-go2="couple-goals"><div class="tico">🎯</div><b>Couple goals</b><div class="sub">${c.goals.length?c.goals.filter(g=>g.done).length+"/"+c.goals.length+" done":"Set a goal"}</div></button>
+      <button class="tool-card" data-go2="couple-dates"><div class="tico">🗓️</div><b>Date planner</b><div class="sub">${c.dates.length?c.dates.length+" planned":"Plan a date"}</div></button>
+      <button class="tool-card" data-go2="couple-budget"><div class="tico">💰</div><b>Budget planner</b><div class="sub">${c.budget.length?"Balance "+fmtKes(bt.balance):"Plan finances"}</div></button>
+    </div>
+    <button class="btn secondary" data-go2="couple-checkin" style="margin-top:12px">📝 Weekly relationship check-in</button>
+
+    ${c.journal.length?`<div class="sec-h"><h3>Recent journal</h3><a href="#/couple-journal">See all</a></div>
+      ${c.journal.slice(-2).reverse().map(e=>journalEntryHTML(e,p)).join("")}`:""}
+    <div style="height:8px"></div>
   </div>`,
   mount(root){
-    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
-    $("#notify",root).onclick = ()=> toast("We'll let you know 💚");
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
+    $("[data-act=settings]",root).onclick = ()=>{
+      const box = sheet(`<h3>Couple Space</h3><p class="muted tiny" style="margin:8px 0 14px">Ending this clears your shared journal, goals and plans on this device.</p>
+        <button class="btn danger" id="end">End relationship space</button><button class="btn ghost" id="cancel" style="margin-top:6px">Cancel</button>`);
+      $("#cancel",box.el).onclick = box.close;
+      $("#end",box.el).onclick = ()=>{ endCouple(); box.close(); toast("Couple Space closed"); go("couple"); };
+    };
+  }};
+});
+
+function coupleGate(){
+  const partners = connectedPartners();
+  const demo = rankedMatches()[0]?.c;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Couple Space</h2></div>
+  <div class="pad stack center">
+    <div style="font-size:52px">💑</div>
+    <h2>A space that's just yours</h2>
+    <p class="muted" style="max-width:34ch;margin:0 auto">Couple Space unlocks when you and a match both agree to commit to a relationship. Inside: a shared journal, goals, a date planner, budget and weekly check-ins.</p>
+    ${partners.length ? `
+      <div class="card" style="text-align:left;width:100%">
+        <p class="tiny faint" style="margin-bottom:10px">COMMIT WITH SOMEONE YOU'VE CONNECTED WITH</p>
+        <div class="stack">
+          ${partners.map(pt=>`<div class="row between"><div class="row" style="gap:10px">${avatar(pt.name,pt.color,"sm")}<b>${esc(pt.name)}</b></div>
+            <button class="btn sm" data-commit="${pt.id}">Commit together</button></div>`).join("")}
+        </div>
+      </div>` : `
+      <div class="callout teal" style="text-align:left;width:100%">💡 Connect with a match first — once you've both expressed interest and are ready, you can open Couple Space together.</div>
+      <button class="btn" data-go2="matches">Browse matches</button>`}
+    ${demo?`<button class="btn ghost" data-demo="${demo.id}">Preview with a sample partner (demo)</button>`:""}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
+    $$("[data-commit]",root).forEach(b=> b.onclick = ()=> beginCouple(b.dataset.commit));
+    const dm = $("[data-demo]",root); if(dm) dm.onclick = ()=> beginCouple(dm.dataset.demo);
+  }};
+}
+function beginCouple(partnerId){
+  commitCouple(partnerId);
+  const p = candidate(partnerId);
+  cpl().journal.push({ from:"partner", text:`I'm so glad we're building this together, ${S.user.name}. Here's to us 💚`, ts:Date.now() });
+  save();
+  toast(`Couple Space opened with ${p?.name} 💚`);
+  go("couple");
+}
+function anniversaryNote(c){
+  const d = daysTogether();
+  if(d===0) return "Welcome to your shared space — day one of the journey.";
+  const milestones = {7:"One week together!",30:"One month together!",100:"100 days together!",365:"One year together!"};
+  if(milestones[d]) return milestones[d];
+  const next = [7,30,100,365].find(m=>m>d);
+  return next ? `${next-d} day${next-d===1?"":"s"} until your ${next===7?"1-week":next===30?"1-month":next===100?"100-day":"1-year"} milestone.` : "Every day is worth celebrating.";
+}
+function journalEntryHTML(e,p){
+  const mine = e.from!=="partner";
+  const who = mine ? S.user.name : (p?.name||"Partner");
+  return `<div class="entry"><div class="meta">${esc(who)} · ${relTime(e.ts)}</div>${esc(e.text)}</div>`;
+}
+const fmtKes = n => "KES " + (n||0).toLocaleString();
+
+/* Couple sub-tools */
+route("couple-journal", ()=>{
+  const c = cpl(); if(!c.active) return go("couple");
+  const p = candidate(c.partnerId);
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Shared journal</h2></div>
+  <div class="pad">
+    <div class="card"><textarea class="input" id="jtext" placeholder="Share a thought, a memory, a thank-you…" style="min-height:74px"></textarea>
+      <button class="btn" id="jadd" style="margin-top:12px">Add entry</button></div>
+    <div class="sec-h"><h3>${c.journal.length?"Entries":"Your journal"}</h3></div>
+    <div class="stack">
+      ${c.journal.length? c.journal.slice().reverse().map(e=>journalEntryHTML(e,p)).join("")
+        : `<div class="empty"><div class="ico">📔</div><p>No entries yet. Start with one thing you're grateful for in each other.</p></div>`}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("couple");
+    $("#jadd",root).onclick = ()=>{ const t=$("#jtext",root).value.trim(); if(t.length<2){toast("Write something first");return;}
+      c.journal.push({from:"me",text:t,ts:Date.now()}); save(); toast("Added 💚"); render(); };
+  }};
+});
+
+route("couple-goals", ()=>{
+  const c = cpl(); if(!c.active) return go("couple");
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Couple goals</h2></div>
+  <div class="pad">
+    <div class="card"><label class="field"><span>A goal to work toward together</span>
+      <input class="input" id="gtext" placeholder="e.g. Save for a trip, pray together weekly"></label>
+      <button class="btn" id="gadd" style="margin-top:12px">Add goal</button></div>
+    <div class="sec-h"><h3>${c.goals.length?"Your goals":"Goals"}</h3></div>
+    ${c.goals.length? c.goals.map((g,i)=>`<div class="list-row" style="cursor:default">
+        <button class="lico" data-toggle="${i}" style="background:${g.done?'var(--teal-700)':'var(--teal-50)'};color:${g.done?'#fff':'var(--teal-700)'};font-weight:800;border:none">${g.done?'✓':'○'}</button>
+        <div class="grow"><b style="${g.done?'text-decoration:line-through;opacity:.6':''}">${esc(g.text)}</b></div>
+        <button class="chev" data-del="${i}" style="background:none">✕</button></div>`).join("")
+      : `<div class="empty"><div class="ico">🎯</div><p>No goals yet. Dreaming together is part of the fun.</p></div>`}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("couple");
+    $("#gadd",root).onclick = ()=>{ const t=$("#gtext",root).value.trim(); if(t.length<2){toast("Add a goal first");return;}
+      c.goals.push({text:t,done:false}); save(); render(); };
+    $$("[data-toggle]",root).forEach(b=> b.onclick = ()=>{ const i=+b.dataset.toggle; c.goals[i].done=!c.goals[i].done; save(); render(); });
+    $$("[data-del]",root).forEach(b=> b.onclick = ()=>{ c.goals.splice(+b.dataset.del,1); save(); render(); });
+  }};
+});
+
+route("couple-dates", ()=>{
+  const c = cpl(); if(!c.active) return go("couple");
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Date planner</h2></div>
+  <div class="pad">
+    <div class="card"><label class="field"><span>Plan a date</span>
+      <input class="input" id="dtext" placeholder="Your idea, or pick a suggestion below"></label>
+      <div class="chips" style="margin-top:10px">${DATE_IDEAS.map((d,i)=>`<button class="chip select" data-idea="${i}">${d.length>26?d.slice(0,26)+"…":d}</button>`).join("")}</div>
+      <button class="btn" id="dadd" style="margin-top:12px">Add to plan</button></div>
+    <div class="sec-h"><h3>${c.dates.length?"Planned dates":"Your dates"}</h3></div>
+    ${c.dates.length? c.dates.map((d,i)=>`<div class="list-row" style="cursor:default">
+        <button class="lico" data-done="${i}" style="background:${d.done?'var(--teal-700)':'var(--teal-50)'};color:${d.done?'#fff':'var(--teal-700)'};border:none">${d.done?'✓':'🗓️'}</button>
+        <div class="grow"><b style="${d.done?'text-decoration:line-through;opacity:.6':''}">${esc(d.text)}</b></div>
+        <button class="chev" data-del="${i}" style="background:none">✕</button></div>`).join("")
+      : `<div class="empty"><div class="ico">🗓️</div><p>No dates planned yet. Intentional time together matters.</p></div>`}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("couple");
+    $$("[data-idea]",root).forEach(b=> b.onclick = ()=>{ $("#dtext",root).value = DATE_IDEAS[+b.dataset.idea]; });
+    $("#dadd",root).onclick = ()=>{ const t=$("#dtext",root).value.trim(); if(t.length<2){toast("Add a date idea first");return;}
+      c.dates.push({text:t,done:false}); save(); toast("Date planned 💚"); render(); };
+    $$("[data-done]",root).forEach(b=> b.onclick = ()=>{ const i=+b.dataset.done; c.dates[i].done=!c.dates[i].done; save(); render(); });
+    $$("[data-del]",root).forEach(b=> b.onclick = ()=>{ c.dates.splice(+b.dataset.del,1); save(); render(); });
+  }};
+});
+
+route("couple-budget", ()=>{
+  const c = cpl(); if(!c.active) return go("couple");
+  const bt = budgetTotals();
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Budget planner</h2></div>
+  <div class="pad">
+    <div class="card">
+      <div class="row" style="gap:10px">
+        <div class="grow center"><div class="tiny faint">Income</div><b style="color:var(--ok)">${fmtKes(bt.income)}</b></div>
+        <div class="grow center"><div class="tiny faint">Expenses</div><b style="color:var(--danger)">${fmtKes(bt.expense)}</b></div>
+        <div class="grow center"><div class="tiny faint">Balance</div><b style="color:${bt.balance>=0?'var(--teal-700)':'var(--danger)'}">${fmtKes(bt.balance)}</b></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="gap:8px">
+        <input class="input" id="blabel" placeholder="Item, e.g. Rent" style="flex:2">
+        <input class="input" id="bamt" type="number" placeholder="Amount" style="flex:1">
+      </div>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn sm secondary" id="binc" style="flex:1">+ Income</button>
+        <button class="btn sm secondary" id="bexp" style="flex:1">+ Expense</button>
+      </div>
+    </div>
+    <div class="sec-h"><h3>${c.budget.length?"Items":"Your budget"}</h3></div>
+    ${c.budget.length? c.budget.map((b,i)=>`<div class="list-row" style="cursor:default">
+        <div class="lico" style="background:${b.type==='income'?'#e7f4f2':'var(--coral-50)'};color:${b.type==='income'?'var(--ok)':'var(--danger)'}">${b.type==='income'?'▲':'▼'}</div>
+        <div class="grow"><b>${esc(b.label)}</b><div class="sub">${b.type}</div></div>
+        <div class="row" style="gap:10px"><b class="tiny">${fmtKes(b.amount)}</b><button class="chev" data-del="${i}" style="background:none">✕</button></div></div>`).join("")
+      : `<div class="empty"><div class="ico">💰</div><p>Add income and expenses to plan together.</p></div>`}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("couple");
+    const add = type =>{
+      const label = $("#blabel",root).value.trim(); const amt = +$("#bamt",root).value;
+      if(!label){ toast("Add a label"); return; } if(!(amt>0)){ toast("Add an amount"); return; }
+      c.budget.push({label,amount:amt,type}); save(); render();
+    };
+    $("#binc",root).onclick = ()=> add("income");
+    $("#bexp",root).onclick = ()=> add("expense");
+    $$("[data-del]",root).forEach(b=> b.onclick = ()=>{ c.budget.splice(+b.dataset.del,1); save(); render(); });
+  }};
+});
+
+route("couple-checkin", ()=>{
+  const c = cpl(); if(!c.active) return go("couple");
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Weekly check-in</h2></div>
+  <div class="pad stack">
+    <p class="muted tiny">A gentle weekly pulse on your relationship. Answer honestly and, if you like, share it together.</p>
+    ${COUPLE_CHECKIN.map(q=>`<div class="card"><p style="font-weight:600">${q.q}</p>
+      <div class="likert" data-q="${q.id}">${[1,2,3,4,5].map(n=>`<button data-v="${n}">${n}</button>`).join("")}</div>
+      <div class="likert-legend"><span>Not much</span><span>A lot</span></div></div>`).join("")}
+    <label class="field"><span>One thing to celebrate, one to work on (optional)</span>
+      <textarea class="input" id="cnote" placeholder="Write together…"></textarea></label>
+    <button class="btn" id="csave">Save check-in</button>
+    ${c.checkins.length?`<p class="center tiny faint">${c.checkins.length} check-in${c.checkins.length>1?"s":""} so far</p>`:""}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("couple");
+    $$(".likert",root).forEach(row=> row.querySelectorAll("button").forEach(b=> b.onclick = ()=>{
+      row.querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); }));
+    $("#csave",root).onclick = ()=>{
+      const answers = {}; let missing=false;
+      $$(".likert",root).forEach(row=>{ const on=row.querySelector("button.on"); if(!on) missing=true; else answers[row.dataset.q]=+on.dataset.v; });
+      if(missing){ toast("Please answer each question"); return; }
+      c.checkins.push({ ts:Date.now(), answers, note:$("#cnote",root).value.trim() }); save();
+      toast("Check-in saved 💚"); go("couple");
+    };
+  }};
+});
+
+/* ========================= Marriage Preparation ========================= */
+route("marriage", ()=>{
+  const p = marriageProgress();
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Marriage Preparation</h2></div>
+  <div class="pad">
+    <p class="muted tiny">A guided pathway of the honest conversations that build a marriage able to last. Work through them at your own pace.</p>
+    <div class="card" style="margin-top:14px">
+      <div class="row between"><b>Your progress</b><span class="chip">${p.done}/${p.total}</span></div>
+      <div class="bar" style="margin-top:10px"><i style="width:${p.pct}%"></i></div>
+      ${p.pct===100?`<p class="tiny" style="color:var(--teal-700);margin-top:10px">🎉 You've worked through every conversation. Beautiful preparation.</p>`:""}
+    </div>
+    <div class="sec-h"><h3>Conversations</h3></div>
+    ${MARRIAGE_TOPICS.map(t=>{
+      const done = marriageDone()[t.id];
+      return `<div class="list-row" data-topic="${t.id}">
+        <div class="lico" style="background:${done?'var(--teal-700)':'var(--teal-50)'};color:${done?'#fff':'inherit'};font-size:20px">${done?'✓':t.icon}</div>
+        <div class="grow"><b>${esc(t.title)}</b><div class="sub">${done?'Discussed':esc(t.desc)}</div></div>
+        <div class="chev">›</div></div>`;
+    }).join("")}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-topic]",root).forEach(el=> el.onclick = ()=> go("mtopic", el.dataset.topic));
+  }};
+});
+route("mtopic", (id)=>{
+  const t = MARRIAGE_TOPICS.find(x=>x.id===id); if(!t) return go("marriage");
+  const done = marriageDone()[id];
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Conversation</h2></div>
+  <div class="pad stack">
+    <div class="center"><div style="font-size:46px">${t.icon}</div><h2 style="margin-top:6px">${esc(t.title)}</h2>
+      <p class="muted">${esc(t.desc)}</p></div>
+    <div class="card">
+      <p class="tiny faint" style="margin-bottom:10px">TALK ABOUT</p>
+      <div class="stack">${t.points.map(pt=>`<div class="reason"><span class="k">•</span><span>${esc(pt)}</span></div>`).join("")}</div>
+    </div>
+    <div class="callout teal">💡 There are no right answers — the goal is to understand each other, not to agree on everything.</div>
+    <button class="btn ${done?'secondary':''}" id="mark">${done?'✓ Discussed — tap to undo':'Mark as discussed'}</button>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("marriage");
+    $("#mark",root).onclick = ()=>{ const d=marriageDone(); if(d[id]) delete d[id]; else d[id]=true; save();
+      toast(d[id]?"Marked as discussed ✓":"Marked as not done"); go("marriage"); };
+  }};
+});
+
+/* ============================ Community Groups ============================ */
+route("community", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Community Groups</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Moderated, confidential discussion groups to grow alongside people in a similar season. Be kind — every group is a safe space.</p>
+    <div style="margin-top:14px">
+      ${COMMUNITY_GROUPS.map(g=>{
+        const on = community().joined.includes(g.id);
+        return `<div class="card" style="margin-bottom:12px">
+          <div class="row" style="gap:12px">
+            <div class="lico" style="font-size:22px">${g.icon}</div>
+            <div class="grow"><b>${esc(g.name)}</b><div class="sub tiny faint">${g.members + (on?1:0)} members</div></div>
+            <button class="btn sm ${on?"secondary":""}" data-join="${g.id}">${on?"Joined":"Join"}</button>
+          </div>
+          <p class="tiny muted" style="margin-top:8px">${esc(g.desc)}</p>
+          <button class="btn sm ghost" data-open="${g.id}" style="margin-top:6px;width:100%">Open discussion →</button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-join]",root).forEach(b=> b.onclick = ()=>{ const now=toggleCommunity(b.dataset.join); toast(now?"Joined 👋":"Left group"); render(); });
+    $$("[data-open]",root).forEach(b=> b.onclick = ()=> go("cgroup", b.dataset.open));
+  }
+}));
+route("cgroup", (id)=>{
+  const g = COMMUNITY_GROUPS.find(x=>x.id===id); if(!g) return go("community");
+  const posts = communityPosts(id);
+  const joined = community().joined.includes(id);
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button>
+    <div class="grow"><b>${esc(g.name)}</b><div class="tiny faint">${g.members+(joined?1:0)} members · moderated</div></div>
+    <button class="btn sm ${joined?"secondary":""}" data-join style="width:auto">${joined?"Joined":"Join"}</button></div>
+  <div class="pad">
+    <div class="card"><textarea class="input" id="ptext" placeholder="Share with the group…" style="min-height:60px"></textarea>
+      <button class="btn" id="ppost" style="margin-top:10px">Post</button>
+      <p class="tiny faint center" style="margin-top:8px">🛡️ Posts are moderated for a respectful, safe space.</p></div>
+    <div class="sec-h"><h3>Discussion</h3></div>
+    <div class="stack">
+      ${posts.map(post=>`<div class="entry">
+        <div class="row" style="gap:8px;margin-bottom:4px">${avatar(post.a,post.mine?S.user.color:'#7f908d',"sm")}
+          <div><b class="tiny">${esc(post.a)}</b><div class="meta">${relTime(post.ts)}</div></div></div>
+        <p>${esc(post.t)}</p></div>`).join("")}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("community");
+    $("[data-join]",root).onclick = ()=>{ toggleCommunity(id); render(); };
+    $("#ppost",root).onclick = ()=>{ const t=$("#ptext",root).value.trim(); if(t.length<2){toast("Write something first");return;}
+      addCommunityPost(id,t); toast("Posted"); render(); };
+  }};
+});
+
+/* ================================ Events ================================ */
+route("events", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Events</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Meet safely in real life at counsellor-hosted gatherings. RSVP to save your place.</p>
+    <div style="margin-top:14px">
+      ${EVENTS.map(e=>{
+        const on = eventsState().rsvp.includes(e.id);
+        return `<div class="card" style="margin-bottom:12px" data-ev="${e.id}">
+          <div class="row" style="gap:12px">
+            <div class="lico" style="font-size:22px">${e.icon}</div>
+            <div class="grow"><b>${esc(e.title)}</b><div class="sub tiny faint">${esc(e.type)} · ${esc(e.location)} · ${esc(e.price)}</div></div>
+            <span class="chip ${on?"":"gold"}">${fmtDate(dateFromOffset(e.inDays))}</span>
+          </div>
+          <p class="tiny muted" style="margin-top:8px">${esc(e.blurb)}</p>
+          <button class="btn sm ${on?"secondary":""}" data-rsvp="${e.id}" style="width:100%;margin-top:10px">${on?"✓ You're going — tap to cancel":"RSVP"}</button>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-rsvp]",root).forEach(b=> b.onclick = e=>{ e.stopPropagation(); const now=toggleRSVP(b.dataset.rsvp);
+      toast(now?"RSVP confirmed — see you there 🎉":"RSVP cancelled"); render(); });
+  }
+}));
+
+/* ================================ Premium ================================ */
+route("premium", ()=>{
+  const plan = currentPlan();
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Premium</h2></div>
+  <div class="pad">
+    <p class="muted tiny">Go deeper with unlimited professional support. Your core journey is always free.</p>
+    <div style="margin-top:14px">
+      ${PREMIUM_PLANS.map(pl=>{
+        const active = pl.id===plan;
+        return `<div class="card plan-card ${pl.popular?"popular":""} ${active?"active":""}" style="margin-bottom:12px">
+          ${pl.popular?`<span class="chip gold" style="position:absolute;top:-9px;right:16px">Most popular</span>`:""}
+          <div class="row between"><b style="font-size:17px">${esc(pl.name)}</b>${active?`<span class="chip">Current</span>`:""}</div>
+          <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(pl.price)}</span><span class="tiny faint">${esc(pl.per)}</span></div>
+          <p class="tiny faint">${esc(pl.tagline)}</p>
+          <div class="stack" style="margin-top:12px">${pl.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
+          ${active ? `<button class="btn secondary" disabled style="margin-top:14px">Your current plan</button>`
+                   : pl.id==="free" ? `<button class="btn secondary" data-plan="free" style="margin-top:14px">Switch to Free</button>`
+                   : `<button class="btn" data-plan="${pl.id}" style="margin-top:14px">Choose ${esc(pl.name)}</button>`}
+        </div>`;
+      }).join("")}
+    </div>
+    <p class="center tiny faint" style="margin-top:6px">Prototype — no payment is taken. This is a demo of the upgrade flow.</p>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-plan]",root).forEach(b=> b.onclick = ()=>{
+      const id = b.dataset.plan;
+      if(id==="free"){ setPlan("free"); toast("Switched to Free"); render(); return; }
+      const pl = PREMIUM_PLANS.find(x=>x.id===id);
+      const box = sheet(`
+        <div class="center"><div style="font-size:38px">⭐</div><h3 style="margin-top:6px">${esc(pl.name)} — ${esc(pl.price)}${esc(pl.per)}</h3>
+        <p class="muted tiny" style="margin:8px 0 4px">You're about to start the ${esc(pl.name)} plan.</p>
+        <div class="callout gold" style="text-align:left;margin:12px 0">🔒 This is a prototype — no payment method is requested and no money is taken.</div></div>
+        <button class="btn" id="confirm">Start ${esc(pl.name)} (demo)</button>
+        <button class="btn ghost" id="cancel" style="margin-top:6px">Cancel</button>`);
+      $("#cancel",box.el).onclick = box.close;
+      $("#confirm",box.el).onclick = ()=>{ setPlan(id); box.close(); toast(`${pl.name} activated 🌟`); render(); };
+    });
   }};
 });
 

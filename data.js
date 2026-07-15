@@ -219,6 +219,92 @@ const RESOURCES = [
     body:"Consider booking a session if you feel persistently low, anxious or stuck; if past hurt keeps affecting your relationships; or simply if you'd value a steady, professional space to think. You don't need to be in crisis to deserve support." },
 ];
 
+/* ---- Couple Space content ---- */
+const COUPLE_PROMPTS = [
+  "What's one thing your partner did this week that you appreciated?",
+  "What's a small worry you've been carrying that you could share?",
+  "Where would you like us to grow closer this month?",
+  "What did we handle well the last time we disagreed?",
+  "What's a dream you'd love us to work toward together?",
+];
+const COUPLE_CHECKIN = [
+  { id:"closeness",   q:"How close have we felt this week?" },
+  { id:"communication", q:"How well have we been communicating?" },
+  { id:"support",     q:"How supported do you feel by me?" },
+];
+
+/* ---- Marriage Preparation pathway ---- */
+const MARRIAGE_TOPICS = [
+  { id:"financial", icon:"💰", title:"Financial planning",
+    desc:"Align on money before it becomes a strain.",
+    points:["Share incomes, debts and family obligations openly","Agree on saving vs. spending and 'ours vs. mine'","Set one shared financial goal for your first year","Understand each other's money story, not just the numbers"] },
+  { id:"conflict", icon:"🕊️", title:"Conflict management",
+    desc:"Learn to disagree without disconnecting.",
+    points:["Agree how you'll pause when things heat up","Practise 'I feel… I need…' instead of blame","Repair quickly — own your part without a 'but'","Decide together what fighting fair looks like"] },
+  { id:"family", icon:"👨‍👩‍👧", title:"Family expectations",
+    desc:"Name the unspoken assumptions about family.",
+    points:["Discuss roles at home and how you'll share them","Agree boundaries with extended family together","Talk about holidays, support and involvement","Present a united front on the big decisions"] },
+  { id:"parenting", icon:"👶", title:"Parenting discussions",
+    desc:"Get aligned on children before you need to.",
+    points:["Whether and when you both want children","How you'll discipline and show affection","The role of faith and family in raising them","What you'll each carry forward — and leave behind"] },
+  { id:"intimacy", icon:"❤️", title:"Intimacy & sexual health",
+    desc:"An honest, respectful conversation about closeness.",
+    points:["Talk openly about expectations and comfort","Understand consent and ongoing communication","Discuss sexual health and any medical check-ups","Agree that intimacy grows on trust and safety"] },
+  { id:"legal", icon:"⚖️", title:"Legal aspects of marriage",
+    desc:"Understand the practical and legal side.",
+    points:["Types of marriage recognised in Kenya and registration","Rights, responsibilities and property","Whether to discuss any pre-marital agreements","Documents you'll need and how to prepare them"] },
+  { id:"wedding", icon:"💒", title:"Wedding planning checklist",
+    desc:"Plan a celebration that reflects you both.",
+    points:["Agree a budget you're both at peace with","Decide guest list, venue and date together","Divide tasks so the load is shared","Keep sight of the marriage, not just the wedding"] },
+];
+
+/* ---- Community discussion groups (distinct from counselling support groups) ---- */
+const COMMUNITY_GROUPS = [
+  { id:"cg1", icon:"💍", name:"Singles Preparing for Marriage", members:214,
+    desc:"For those getting ready to build a lasting partnership.",
+    seed:[ {a:"Faith W.", t:"Grateful for this space. Six months of counselling and I finally feel ready to date with intention.", d:2},
+           {a:"Peter O.", t:"What helped you all rebuild self-worth after a hard breakup?", d:5} ] },
+  { id:"cg2", icon:"💼", name:"Young Professionals", members:180,
+    desc:"Balancing career, growth and a healthy love life.",
+    seed:[ {a:"Aisha M.", t:"How do you make time for dating when work is this demanding?", d:1} ] },
+  { id:"cg3", icon:"🕊️", name:"Widows & Widowers", members:96,
+    desc:"Gentle support for loving again after loss.",
+    seed:[ {a:"Grace N.", t:"Two years on. Some days are heavy, but this community reminds me I'm not alone.", d:3} ] },
+  { id:"cg4", icon:"👪", name:"Single Parents", members:142,
+    desc:"Dating and healing while raising your children.",
+    seed:[ {a:"Daniel K.", t:"When is the right time to introduce someone to your kids? Would love your thoughts.", d:4} ] },
+  { id:"cg5", icon:"🌿", name:"Retirement & Later-life Love", members:63,
+    desc:"Companionship and connection in a new season.",
+    seed:[ {a:"Margaret A.", t:"It's never too late for gentle companionship. So glad I joined.", d:6} ] },
+  { id:"cg6", icon:"✝️", name:"Faith-based Enrichment", members:158,
+    desc:"Growing in relationships rooted in shared faith.",
+    seed:[ {a:"Samuel W.", t:"Weekly reflection: love is patient. How does that show up in how you date?", d:2} ] },
+];
+
+/* ---- Events ---- */
+const EVENTS = [
+  { id:"e1", icon:"🥂", type:"Singles mixer", title:"Nairobi Singles Mixer", inDays:5, time:"18:00",
+    location:"Nairobi", price:"KES 500", blurb:"A relaxed, counsellor-hosted evening to meet other members in a safe, respectful setting." },
+  { id:"e2", icon:"🎤", type:"Seminar", title:"Building Secure Love", inDays:9, time:"15:00",
+    location:"Online", price:"Free", blurb:"A live seminar on what secure attachment looks like and how to cultivate it." },
+  { id:"e3", icon:"💍", type:"Workshop", title:"Premarital Workshop", inDays:16, time:"10:00",
+    location:"Nairobi", price:"KES 2,000", blurb:"A full-day workshop for couples preparing for engagement and marriage." },
+  { id:"e4", icon:"🏞️", type:"Retreat", title:"Marriage Enrichment Retreat", inDays:30, time:"09:00",
+    location:"Naivasha", price:"KES 12,000", blurb:"A weekend away to deepen connection, guided by our counselling team." },
+  { id:"e5", icon:"🤝", type:"Community", title:"Community Service Day", inDays:12, time:"08:30",
+    location:"Machakos", price:"Free", blurb:"Serve together and build friendships through shared purpose." },
+];
+
+/* ---- Premium plans (prototype — no real payment is taken) ---- */
+const PREMIUM_PLANS = [
+  { id:"free", name:"Free", price:"KES 0", per:"", tagline:"The core journey",
+    features:["Relationship Readiness & Wellness Score","A few curated matches","Mutual-consent messaging","Learning Academy","Wellness Tools"] },
+  { id:"premium", name:"Premium", price:"KES 1,500", per:"/month", tagline:"Go deeper", popular:true,
+    features:["Everything in Free","Unlimited counsellor messaging","Monthly video counselling","Compatibility insights","Exclusive webinars"] },
+  { id:"premiumplus", name:"Premium+", price:"KES 3,500", per:"/month", tagline:"Fully supported",
+    features:["Everything in Premium","Weekly video counselling","Dedicated couples coaching","Advanced relationship courses","Priority event access"] },
+];
+
 /* ---- Candidate pool ----
    Each has the attributes the matcher scores against. Photos are avatar
    initials + colour (no real people). "prefs" describes what they seek. */

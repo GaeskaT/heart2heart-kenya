@@ -82,11 +82,31 @@ Professional support throughout the journey, all persisted in `localStorage`:
 - **Resources** — a small library that deep-links into Academy courses, plus
   info cards (including Kenya crisis/safety helplines and when to seek help).
 
-## What's stubbed (navigable placeholders)
+### Couple Space, Marriage Prep, Community, Events & Premium (fully built)
 
-Presented as real, browsable screens describing what's inside, marked as roadmap:
-Stage 4 Marriage Preparation, Couple Space, Community Groups, Events,
-and Premium.
+The remaining areas are now real, interactive features, all persisted:
+
+- **Couple Space** — unlocks when you commit with a connected match (or a demo
+  partner). Inside: a **shared journal**, **couple goals**, a **date planner**
+  (with suggestions), a **budget planner** (income/expense/balance), a **weekly
+  relationship check-in**, and computed **anniversary milestones**.
+- **Marriage Preparation** — a Stage 4 pathway of 7 guided conversations
+  (finances, conflict, family, parenting, intimacy, legal, wedding) with a
+  detail view and progress tracking.
+- **Community Groups** — 6 moderated discussion groups by life season; join /
+  leave and post to a group feed (with seeded discussion).
+- **Events** — mixers, seminars, workshops, a retreat and a service day, each
+  with date, location, price and RSVP.
+- **Premium** — Free / Premium / Premium+ tiers with a feature comparison and a
+  simulated upgrade flow (**prototype — no payment is ever taken**).
+
+Every feature's state surfaces on the Profile "Your journey" rows.
+
+## Everything is built
+
+All stages and feature clusters from the concept are now implemented as working,
+persisted features. This is a front-end prototype: matching, verification,
+counsellor accounts and payments are simulated, with no backend.
 
 ## Files
 

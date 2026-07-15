@@ -333,6 +333,11 @@ textarea.input{ resize:vertical; min-height:84px; }
 .pickrow.on{ border-color:var(--teal-600); background:var(--teal-50); }
 .pickrow .sub{ font-size:12px; color:var(--ink-faint); margin-top:1px; }
 
+/* ---------- Premium plan cards ---------- */
+.plan-card{ position:relative; border:1.5px solid var(--line); box-shadow:none; }
+.plan-card.popular{ border-color:var(--gold-500); }
+.plan-card.active{ border-color:var(--teal-600); background:var(--teal-50); }
+
 /* ---------- Affirmation card ---------- */
 .affirm{ background:linear-gradient(135deg,#e0a44b,#e2674f); color:#fff; border-radius:var(--radius-lg); padding:24px 22px; text-align:center; }
 .affirm .txt{ font-size:20px; font-weight:600; line-height:1.35; }
