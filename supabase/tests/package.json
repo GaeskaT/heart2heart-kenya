@@ -1,0 +1,12 @@
+{
+  "name": "h2h-schema-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs the Supabase migrations against an embedded Postgres (PGlite) and asserts the RLS policies.",
+  "scripts": {
+    "test": "node run-tests.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.4"
+  }
+}

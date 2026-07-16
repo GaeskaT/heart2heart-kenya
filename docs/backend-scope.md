@@ -259,9 +259,20 @@ Payments still need their **Edge Functions** (M-Pesa Daraja STK push + webhook
 verification); the database side is done and deliberately refuses to grant
 entitlement from anything but a verified server-side callback.
 
-**The main outstanding risk is validation debt**: none of the SQL has been
-executed against a live Postgres yet. Before building Phase 3, the highest-value
-step is to stand up a Supabase project, apply `0001`–`0003`, and verify the
-policies behave as intended (especially: members cannot read other profiles,
-counsellors see only their own clients, and clinical notes are invisible to
-members).
+**Validation debt: cleared.** The migrations now run against an embedded
+Postgres (PGlite) under an automated suite that impersonates member /
+counsellor / admin / anon sessions — **52 assertions, 0 failures**
+(`cd supabase/tests && npm install && npm test`). It proves the properties that
+actually matter: members can't read each other's profiles or escalate their
+role, counsellors see only their own clients, clinical notes are invisible to
+the member they describe, a member can't grant themselves premium, and consent
+gates messaging.
+
+Running it caught three real bugs that careful reading had missed — a
+completely broken `send_message`, staff appearing in the dating pool, and a
+hardening regression that blocked all message reads. Any new policy or RPC
+should ship with a case in that suite.
+
+Still needs a hosted project: GoTrue auth flows, provider webhooks (M-Pesa /
+card), and the Edge Functions for real moderation, video tokens and
+notification fan-out.

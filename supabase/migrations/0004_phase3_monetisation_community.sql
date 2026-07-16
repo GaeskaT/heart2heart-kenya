@@ -462,11 +462,20 @@ begin
   end loop;
 end $$;
 
--- re-grant the member-callable surface (phases 0–3)
+-- Re-grant the member-callable surface (phases 0–3).
+--
+-- IMPORTANT: this list must include every helper a POLICY calls, not just the
+-- RPCs the client calls directly. Policies are evaluated as the querying user,
+-- so a missing grant here fails the whole query with "permission denied for
+-- function …" rather than simply filtering rows. (Helpers invoked *inside* a
+-- SECURITY DEFINER function run as the owner and don't need a grant.)
+-- Policy-called helpers: auth_role, is_admin, is_staff, is_my_client,
+-- is_counsellor, is_conv_participant, is_group_member.
 grant execute on function public.redeem_invite(text)                                   to authenticated;
 grant execute on function public.auth_role()                                           to authenticated;
 grant execute on function public.is_admin()                                            to authenticated;
 grant execute on function public.is_staff()                                            to authenticated;
+grant execute on function public.is_conv_participant(uuid)                             to authenticated;
 grant execute on function public.get_matches(int)                                      to authenticated;
 grant execute on function public.member_card(uuid)                                     to authenticated;
 grant execute on function public.express_interest(uuid)                                to authenticated;

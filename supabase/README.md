@@ -21,8 +21,18 @@ order (`0001`, then `0002`, …).
 See [`../docs/backend-scope.md`](../docs/backend-scope.md) for the full backend
 plan and later phases.
 
-> Status: the migrations are written and reviewed but have **not** been run
-> against a live project yet. Apply them to a fresh Supabase project to validate.
+> **Status: verified.** All four migrations apply cleanly and their security
+> policies are proven by an automated suite — **52 assertions, 0 failures** —
+> which runs the real migrations against an embedded Postgres and impersonates
+> member / counsellor / admin / anon sessions. See [`tests/`](tests/):
+>
+> ```bash
+> cd supabase/tests && npm install && npm test
+> ```
+>
+> They have not yet run against a hosted Supabase project (auth flows and
+> provider webhooks still need a real project), but the schema, RLS and RPCs
+> are no longer taken on trust.
 
 ## What it creates
 

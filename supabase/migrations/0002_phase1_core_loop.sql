@@ -236,6 +236,7 @@ begin
     from public.profiles p
     where p.id <> me.id
       and p.onboarded = true
+      and p.role = 'member'        -- staff accounts must never enter the dating pool
       and not public.is_blocked(me.id, p.id)
       and not exists (
         select 1 from public.connections c
@@ -372,35 +373,50 @@ begin
 end $$;
 
 -- 4.7 send a message (runs moderation; unlocked only for participants)
+--
+-- NOTE: returns jsonb rather than `returns table (id, moderation_status)`.
+-- Those OUT names would become PL/pgSQL variables that collide with the
+-- identically-named columns on `conversations`/`messages`, making every column
+-- reference ambiguous at runtime. Parameters are qualified as
+-- `send_message.<param>` for the same reason. Verified by supabase/tests.
 create or replace function public.send_message(conversation_id uuid, body text)
-returns table (id uuid, moderation_status public.moderation_status)
+returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare conv public.conversations; other uuid; mstatus public.moderation_status; signal text; new_id uuid;
+declare
+  v_conv   public.conversations%rowtype;
+  v_other  uuid;
+  v_status public.moderation_status;
+  v_signal text;
+  v_id     uuid;
 begin
-  select * into conv from public.conversations where id = conversation_id;
-  if not found then raise exception 'conversation not found'; end if;
-  if conv.user_a <> auth.uid() and conv.user_b <> auth.uid() then
+  select c.* into v_conv
+    from public.conversations c
+   where c.id = send_message.conversation_id;
+  if not found then raise exception 'conversation_not_found'; end if;
+
+  if v_conv.user_a <> auth.uid() and v_conv.user_b <> auth.uid() then
     raise exception 'not a participant';
   end if;
-  other := case when conv.user_a = auth.uid() then conv.user_b else conv.user_a end;
-  if public.is_blocked(auth.uid(), other) then raise exception 'blocked'; end if;
 
-  mstatus := public.moderate_text(body);
-  new_id := gen_random_uuid();
+  v_other := case when v_conv.user_a = auth.uid() then v_conv.user_b else v_conv.user_a end;
+  if public.is_blocked(auth.uid(), v_other) then raise exception 'blocked'; end if;
+
+  v_status := public.moderate_text(send_message.body);
+  v_id     := gen_random_uuid();
 
   insert into public.messages (id, conversation_id, sender, body, moderation_status)
-    values (new_id, conversation_id, auth.uid(), body, mstatus);
+    values (v_id, send_message.conversation_id, auth.uid(), send_message.body, v_status);
 
   insert into public.moderation_events (message_id, model, action)
-    values (new_id, 'keyword-v1', mstatus::text);
+    values (v_id, 'keyword-v1', v_status::text);
 
-  signal := public.crisis_signal(body);
-  if signal is not null then
+  v_signal := public.crisis_signal(send_message.body);
+  if v_signal is not null then
     insert into public.safety_flags (user_id, source, source_id, signal)
-      values (auth.uid(), 'message', new_id::text, signal);
+      values (auth.uid(), 'message', v_id::text, v_signal);
   end if;
 
-  return query select new_id, mstatus;
+  return jsonb_build_object('id', v_id, 'moderation_status', v_status);
 end $$;
 
 -- ---------------------------------------------------------------------------

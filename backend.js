@@ -196,7 +196,7 @@ const Backend = (() => {
   async function sendMessage(conversationId, body){
     const { data, error } = await client.rpc("send_message", { conversation_id: conversationId, body });
     if (error) throw error;
-    return (data && data[0]) || null; // { id, moderation_status }
+    return data || null; // jsonb: { id, moderation_status: 'approved' | 'flagged' }
   }
   // Subscribe to new messages in a conversation. Returns an unsubscribe fn.
   function subscribeMessages(conversationId, onInsert){
