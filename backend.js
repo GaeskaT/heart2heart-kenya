@@ -208,6 +208,67 @@ const Backend = (() => {
     return () => client.removeChannel(ch);
   }
 
+  /* ---- Phase 2: counselling ---- */
+  async function listCounsellors(){
+    const { data, error } = await client.from("counsellors")
+      .select("id, title, specialties, bio, accepting_new").eq("active", true);
+    if (error) throw error;
+    return data || [];
+  }
+  async function openSlots(counsellorId){
+    const { data, error } = await client.rpc("open_slots", { counsellor: counsellorId });
+    if (error) throw error;
+    return data || [];
+  }
+  async function bookSession(slotId, sessionType, format){
+    const { data, error } = await client.rpc("book_session", { slot: slotId, s_type: sessionType, fmt: format });
+    if (error) throw error;   // 'slot_unavailable' if someone just took it
+    return data;              // booking id
+  }
+  async function cancelBooking(bookingId){
+    const { error } = await client.rpc("cancel_booking", { booking_id: bookingId });
+    if (error) throw error;
+  }
+  async function listBookings(){
+    const { data, error } = await client.from("bookings")
+      .select("id, counsellor_id, session_type, format, scheduled_at, duration_mins, status, video_room")
+      .neq("status", "cancelled").order("scheduled_at", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+  async function askQuestion(body){
+    const { data, error } = await client.rpc("ask_question", { body });
+    if (error) throw error;
+    return data;              // question id
+  }
+  async function listQuestions(){
+    const { data, error } = await client.from("questions")
+      .select("id, body, status, created_at, question_replies(id, body, created_at)")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+  async function listNotifications(){
+    const { data, error } = await client.from("notifications")
+      .select("*").order("created_at", { ascending: false }).limit(50);
+    if (error) throw error;
+    return data || [];
+  }
+  async function markNotificationRead(id){
+    const { error } = await client.rpc("mark_notification_read", { n: id });
+    if (error) throw error;
+  }
+  /* counsellor dashboard */
+  async function counsellorClients(){
+    const { data, error } = await client.rpc("counsellor_clients");
+    if (error) throw error;
+    return data || [];
+  }
+  async function answerQuestion(questionId, body){
+    const { error } = await client.rpc("answer_question", { question_id: questionId, body });
+    if (error) throw error;
+  }
+
   return {
     init, enabled, configured,
     signUp, signIn, signOut, getUser,
@@ -217,5 +278,9 @@ const Backend = (() => {
     getMatches, memberCard, expressInterest, respondInterest,
     blockUser, unblockUser, reportUser, inboundInterests,
     listConversations, listMessages, sendMessage, subscribeMessages,
+    // Phase 2
+    listCounsellors, openSlots, bookSession, cancelBooking, listBookings,
+    askQuestion, listQuestions, listNotifications, markNotificationRead,
+    counsellorClients, answerQuestion,
   };
 })();

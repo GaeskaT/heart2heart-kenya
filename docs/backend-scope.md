@@ -198,9 +198,9 @@ versioned JSON/CDN or a lightweight `content` table; only *progress* is per-user
 
 | Phase | Delivers | Rough effort (1–2 devs) |
 |---|---|---|
-| **0 — Foundations** | Auth, profiles, invites, readiness + wellness score, consent capture, RLS, verification, audit log. | 3–4 weeks |
-| **1 — Core loop** | Server-side matching, interests/consent, realtime messaging, moderation pipeline, reporting/blocking, crisis-safety hooks. | 4–5 weeks |
-| **2 — Counselling** | Counsellor accounts & dashboard, availability + bookings, video sessions, confidential Q&A, notifications (push/SMS/email). | 4–5 weeks |
+| **0 — Foundations** ✅ *schema built* | Auth, profiles, invites, readiness + wellness score, consent capture, RLS, verification, audit log. | 3–4 weeks |
+| **1 — Core loop** ✅ *schema built* | Server-side matching, interests/consent, realtime messaging, moderation pipeline, reporting/blocking, crisis-safety hooks. | 4–5 weeks |
+| **2 — Counselling** ✅ *schema built* | Counsellor accounts & dashboard, availability + bookings, video sessions, confidential Q&A, notifications (push/SMS/email). | 4–5 weeks |
 | **3 — Monetisation & community** | Premium subscriptions via M-Pesa + card, webinars, support/community groups with moderation, events + RSVP. | 4–5 weeks |
 | **4 — Couples & prep** | Couple Space (shared, RLS-scoped), marriage-prep tracking, richer counsellor dashboard & analytics. | 3–4 weeks |
 
@@ -245,3 +245,19 @@ These few choices shape the build — worth locking before Phase 0:
 
 *This scope maps 1:1 to the features in the prototype. Nothing here requires
 throwing away front-end work already done.*
+
+---
+
+## 11. Build status
+
+Phases 0–2 exist as reviewed migrations in [`../supabase/migrations/`](../supabase/migrations/)
+with matching client methods in `../backend.js`. Phase 0's onboarding is wired
+into the UI; Phase 1/2 client methods are ready but the UI still runs on
+`localStorage`.
+
+**The main outstanding risk is validation debt**: none of the SQL has been
+executed against a live Postgres yet. Before building Phase 3, the highest-value
+step is to stand up a Supabase project, apply `0001`–`0003`, and verify the
+policies behave as intended (especially: members cannot read other profiles,
+counsellors see only their own clients, and clinical notes are invisible to
+members).

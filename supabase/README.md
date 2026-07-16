@@ -9,6 +9,10 @@ order (`0001`, then `0002`, …).
 - **Phase 1 — Core loop** (`0002`): server-side matching, interest + mutual
   consent, conversations & moderated messaging, reporting / blocking, and
   crisis-safety hooks. See [Phase 1](#phase-1--core-loop-0002) below.
+- **Phase 2 — Counselling** (`0003`): counsellor accounts & dashboard,
+  availability + bookings, video rooms, confidential Q&A, clinical notes and
+  notifications. Also **tightens Phase 0's profile access**. See
+  [Phase 2](#phase-2--counselling-0003) below.
 
 See [`../docs/backend-scope.md`](../docs/backend-scope.md) for the full backend
 plan and later phases.
@@ -61,14 +65,16 @@ insert into public.counsellor_invites (code, issued_by)
 
 ## Access model (RLS summary)
 
-| Table | Member | Counsellor / Staff | Admin |
-|---|---|---|---|
-| profiles | read/update **own** | read all | read/update all |
-| counsellor_invites | redeem via RPC | read own-issued, create | read/update all |
-| verifications | read/create **own** (no doc fields) | — | full + review |
-| readiness_assessments | read/create **own** | — | read all |
-| consents | read/create **own** (immutable) | — | read all |
-| audit_log | — | — | read |
+(As tightened by `0003` — see Phase 2.)
+
+| Table | Member | Counsellor | Moderator | Admin |
+|---|---|---|---|---|
+| profiles | read/update **own** | read **own clients only** | read all | read/update all |
+| counsellor_invites | redeem via RPC | read own-issued, create | — | read/update all |
+| verifications | read/create **own** (no doc fields) | — | — | full + review |
+| readiness_assessments | read/create **own** | read **own clients only** | — | read all |
+| consents | read/create **own** (immutable) | — | — | read all |
+| audit_log | — | — | — | read |
 
 Key safeguards:
 - `role` and `verified` on `profiles` can only be changed by an admin (enforced
@@ -78,6 +84,10 @@ Key safeguards:
   migration role, so they **bypass RLS on `profiles`** and avoid policy recursion.
 - Verification `document_ref` / `provider_ref` are revoked from the `authenticated`
   role at the column level — clients never see raw verification data.
+- A **counsellor is not a superuser**: they can only read a member who is
+  actually their client (`is_my_client()` — has a booking or an assigned
+  question with them). Moderators keep wider read access because they must
+  review reports.
 
 ## How the front-end maps onto this
 
@@ -139,7 +149,54 @@ The matching client methods are wired in `../backend.js` (`getMatches`,
 `expressInterest`, `sendMessage`, `subscribeMessages`, …), ready to back the
 existing matches/chat UI when Supabase is configured.
 
+## Phase 2 — Counselling (`0003`)
+
+Professional support, plus the counsellor's own workspace.
+
+| Object | Purpose |
+|---|---|
+| `counsellors` | Directory info (title, specialties, bio). Browsable by members. |
+| `availability_slots` | Bookable windows published by a counsellor. |
+| `bookings` | Member ↔ counsellor sessions (type, format, time, `video_room`). |
+| `questions` / `question_replies` | Confidential Q&A with the counselling team. |
+| `session_notes` | Clinical notes — **counsellor + admin only, never the member**. |
+| `notifications` / `push_tokens` | In-app queue + device tokens for fan-out. |
+
+**Write API (RPCs):**
+
+| RPC | Does |
+|---|---|
+| `open_slots(counsellor)` | Free slots in the next 30 days. |
+| `book_session(slot, type, format)` | **Atomically claims** the slot (no double-booking), sizes the session, mints a `video_room` for video, notifies both sides. |
+| `cancel_booking(id)` | Member or counsellor; frees the slot and notifies the other party. |
+| `ask_question(body)` | Confidential question — also runs the **crisis-safety detector**. |
+| `answer_question(id, body)` | Counsellor/admin only; assigns + notifies the member. |
+| `counsellor_clients()` | Dashboard: the counsellor's clients, last session, open questions. |
+| `mark_notification_read(id)` | Own notifications only. |
+
+**Key design points**
+
+- **Least privilege for counsellors.** This migration *narrows* Phase 0: a
+  counsellor can only read profiles/readiness of their **own clients**
+  (`is_my_client()`), not the whole member base. Unassigned questions stay
+  visible to any active counsellor so the team can triage.
+- **Clinical notes are invisible to members** by design — the most restricted
+  table in the schema. Confirm retention/disclosure rules with a licensed
+  clinician and against the Kenya DPA before launch.
+- **No double-booking:** `book_session` claims the slot with a conditional
+  `UPDATE … WHERE booked = false`, so concurrent requests can't both win.
+- **Video:** `bookings.video_room` stores a room id only. Short-lived provider
+  tokens (Daily.co / Twilio) must be minted by an **Edge Function** that checks
+  the caller is that booking's member or counsellor — never in SQL, and never
+  with the API secret shipped to the client.
+- **Notifications** are queued in-DB; an Edge Function fans out to FCM (push),
+  Africa's Talking (SMS) and email.
+
+Client methods are in `../backend.js` (`listCounsellors`, `openSlots`,
+`bookSession`, `cancelBooking`, `askQuestion`, `listNotifications`,
+`counsellorClients`, …).
+
 ## Not yet built
 
-Counselling/bookings/video, payments (M-Pesa), couple space, community, events,
-and the counsellor dashboard come in later phases (see the scope doc).
+Payments (M-Pesa + card), couple space, community groups, and events come in
+later phases (see the scope doc).
