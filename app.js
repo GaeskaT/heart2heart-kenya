@@ -35,7 +35,7 @@ function load(){
   return structuredClone(DEFAULT_STATE);
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
-function reset(){ S = structuredClone(DEFAULT_STATE); save(); go("welcome"); }
+function reset(){ S = structuredClone(DEFAULT_STATE); save(); resetRemote(); go("welcome"); }
 
 /* ---------------- Small utils ---------------- */
 const $  = (s,r=document)=>r.querySelector(s);
@@ -234,32 +234,49 @@ function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save()
 /* ---------------- Compatibility matcher ---------------- */
 const INTENTION_RANK = { exploring:0, committed:1, marriage:2 };
 
+/* The "why you match" lines. Shared by both modes: locally we pair them with a
+   locally-computed score, in Supabase mode with the server's authoritative one
+   (public.match_score). Deliberately needs no age prefs, which get_matches()
+   doesn't expose. */
+function matchReasons(u, c){
+  const reasons = [];
+  const shared = (u.values||[]).filter(v => (c.values||[]).includes(v));
+  if(shared.length) reasons.push({k:"Shared values", v: shared.slice(0,3).join(", ")});
+
+  const gap = Math.abs((INTENTION_RANK[u.intention]??1) - (INTENTION_RANK[c.intention]??1));
+  if(gap === 0) reasons.push({k:"Same intention", v: intentionLabel(c.intention)});
+
+  const shy = v => v === "Prefer not to say";
+  if(u.faith === c.faith && !shy(u.faith) && u.faith) reasons.push({k:"Shared faith", v:c.faith});
+
+  if(familyAlign(u.familyGoal, c.familyGoal).pts >= 12) reasons.push({k:"Family goals align", v:c.familyGoal});
+  if(u.county && u.county === c.county) reasons.push({k:"Near you", v:c.county});
+  return reasons;
+}
+
 function scoreMatch(u, c){
-  let pts = 0, max = 0; const reasons = [];
+  let pts = 0, max = 0;
 
   // Shared values — up to 30
   max += 30;
   const shared = (u.values||[]).filter(v => c.values.includes(v));
   pts += Math.min(30, shared.length * 10);
-  if(shared.length) reasons.push({k:"Shared values", v: shared.slice(0,3).join(", ")});
 
   // Relationship intention — up to 20
   max += 20;
   const gap = Math.abs((INTENTION_RANK[u.intention]??1) - (INTENTION_RANK[c.intention]??1));
-  if(gap === 0){ pts += 20; reasons.push({k:"Same intention", v: intentionLabel(c.intention)}); }
+  if(gap === 0){ pts += 20; }
   else if(gap === 1){ pts += 11; }
 
   // Faith — up to 15
   max += 15;
   const shy = v => v === "Prefer not to say";
-  if(u.faith === c.faith && !shy(u.faith)){ pts += 15; reasons.push({k:"Shared faith", v:c.faith}); }
+  if(u.faith === c.faith && !shy(u.faith)){ pts += 15; }
   else if(shy(u.faith) || shy(c.faith)){ pts += 8; }
 
   // Family goals — up to 15
   max += 15;
-  const fg = familyAlign(u.familyGoal, c.familyGoal);
-  pts += fg.pts;
-  if(fg.pts >= 12) reasons.push({k:"Family goals align", v:c.familyGoal});
+  pts += familyAlign(u.familyGoal, c.familyGoal).pts;
 
   // Mutual age fit — up to 10
   max += 10;
@@ -270,9 +287,9 @@ function scoreMatch(u, c){
 
   // Location — up to 10
   max += 10;
-  if(u.county === c.county){ pts += 10; reasons.push({k:"Near you", v:c.county}); }
+  if(u.county === c.county){ pts += 10; }
 
-  return { pct: Math.round((pts/max)*100), reasons };
+  return { pct: Math.round((pts/max)*100), reasons: matchReasons(u, c) };
 }
 
 function familyAlign(a, b){
@@ -295,6 +312,7 @@ function rankedMatches(){
 
 /* Seed a couple of inbound interests so the consent flow has life. */
 function seedInbound(){
+  if(Backend.enabled()) return;      // real interests come from the server
   if(S.seededInbound) return;
   const top = rankedMatches().slice(0,5).map(m=>m.c.id);
   ["c1","c6"].forEach(id=>{ if(top.includes(id)) conn(id).status = "they_sent"; });
@@ -304,6 +322,153 @@ function seedInbound(){
   }
   S.seededInbound = true; save();
 }
+
+/* ============================================================
+   Remote (Supabase) data layer for matches & chat.
+   Routes stay synchronous: they call ensureX(), which either
+   returns true (cache warm) or kicks off a fetch and re-renders
+   when it lands. Local mode never touches any of this.
+   ============================================================ */
+const remote = { matches:null, rel:null, cards:{}, msgs:{}, loading:false, err:null };
+function resetRemote(){ remote.matches=null; remote.rel=null; remote.cards={}; remote.msgs={}; remote.err=null; }
+
+/* server profile row -> the shape the existing UI already renders */
+function cardFromRow(r){
+  return {
+    id:r.id, name:r.full_name || "Member", age:r.age, county:r.county,
+    color:r.avatar_color || "#0f6f6a", career:r.career, verified:!!r.verified,
+    values:r.values || [], intention:r.intention, bio:r.bio, faith:r.faith,
+    education:r.education, familyGoal:r.family_goal,
+  };
+}
+
+async function loadRemote(){
+  const [rows, rel] = await Promise.all([Backend.getMatches(12), Backend.relationships()]);
+  remote.matches = rows.map(r => {
+    const c = cardFromRow(r);
+    return { c, pct: r.score, reasons: matchReasons(S.user, c) };   // server score, client reasons
+  });
+  remote.rel = rel;
+
+  // People we're linked to but who aren't in the match list (get_matches excludes
+  // anyone already connected) still need a name/avatar — fetch their cards.
+  const others = new Set();
+  rel.conversations.forEach(c => others.add(c.user_a === rel.me ? c.user_b : c.user_a));
+  rel.interests.forEach(i => others.add(i.from_user === rel.me ? i.to_user : i.from_user));
+  others.delete(rel.me);
+  const need = [...others].filter(id => !remote.matches.some(m => m.c.id === id) && !remote.cards[id]);
+  const cards = await Promise.all(need.map(id => Backend.memberCard(id).catch(() => null)));
+  need.forEach((id, i) => { if(cards[i]) remote.cards[id] = cardFromRow(cards[i]); });
+}
+
+/* returns true when data is ready to render */
+function ensureRemote(){
+  if(!Backend.enabled()) return true;
+  if(remote.matches && remote.rel) return true;
+  if(remote.loading) return false;
+  remote.loading = true; remote.err = null;
+  loadRemote()
+    .catch(e => { remote.err = e.message || String(e); console.warn("[remote]", e); })
+    .finally(() => { remote.loading = false; render(); });
+  return false;
+}
+
+/* ---- relationship state derived from the server tables ---- */
+function relStatus(id){
+  const rel = remote.rel; if(!rel) return "none";
+  if(rel.blocks.includes(id)) return "blocked";
+  if(rel.connections.some(c => (c.user_a === id || c.user_b === id) && c.status === "connected")) return "connected";
+  if(rel.interests.some(i => i.from_user === rel.me && i.to_user === id && i.status === "pending")) return "you_sent";
+  if(rel.interests.some(i => i.to_user === rel.me && i.from_user === id && i.status === "pending")) return "they_sent";
+  return "none";
+}
+function relInterestId(id){
+  const rel = remote.rel; if(!rel) return null;
+  return (rel.interests.find(i => i.to_user === rel.me && i.from_user === id && i.status === "pending") || {}).id || null;
+}
+function relConversation(id){
+  const rel = remote.rel; if(!rel) return null;
+  return (rel.conversations.find(c => c.user_a === id || c.user_b === id) || {}).id || null;
+}
+
+/* ---- mode-agnostic accessors the routes use ---- */
+function statusFor(id){ return Backend.enabled() ? relStatus(id) : conn(id).status; }
+function cardFor(id){
+  if(!Backend.enabled()) return candidate(id);
+  const m = (remote.matches || []).find(x => x.c.id === id);
+  return m ? m.c : (remote.cards[id] || null);
+}
+function matchesList(){
+  if(!Backend.enabled()) return rankedMatches();
+  return remote.matches || [];
+}
+function inboundList(){
+  if(!Backend.enabled()) return rankedMatches().filter(m => conn(m.c.id).status === "they_sent");
+  const rel = remote.rel; if(!rel) return [];
+  return rel.interests
+    .filter(i => i.to_user === rel.me && i.status === "pending")
+    .map(i => {
+      const c = cardFor(i.from_user);
+      if(!c) return null;
+      const m = (remote.matches || []).find(x => x.c.id === i.from_user);
+      return { c, pct: m ? m.pct : null, reasons: m ? m.reasons : matchReasons(S.user, c) };
+    })
+    .filter(Boolean);
+}
+/* connected people, for the Messages list */
+function threadList(){
+  if(!Backend.enabled()){
+    return Object.entries(S.connections)
+      .filter(([, c]) => c.status === "connected" || c.status === "they_sent")
+      .map(([id, c]) => ({ id, c, cand: candidate(id) }))
+      .filter(x => x.cand);
+  }
+  const rel = remote.rel; if(!rel) return [];
+  const out = [];
+  rel.conversations.forEach(cv => {
+    const other = cv.user_a === rel.me ? cv.user_b : cv.user_a;
+    if(relStatus(other) !== "connected") return;
+    const cand = cardFor(other);
+    if(cand) out.push({ id: other, c: { status:"connected", messages: remote.msgs[other] || [], unread:0 }, cand });
+  });
+  inboundList().forEach(m => out.push({ id: m.c.id, c: { status:"they_sent", messages:[], unread:0 }, cand: m.c }));
+  return out;
+}
+
+/* ---- chat messages ---- */
+function ensureMessages(userId){
+  if(!Backend.enabled()) return true;
+  if(remote.msgs[userId]) return true;
+  const convId = relConversation(userId);
+  if(!convId) return true;                       // nothing to load yet
+  if(remote.msgs["_loading_" + userId]) return false;
+  remote.msgs["_loading_" + userId] = true;
+  Backend.listMessages(convId)
+    .then(rows => {
+      remote.msgs[userId] = rows.map(r => ({
+        from: r.sender === remote.rel.me ? "me" : "them",
+        text: r.body, ts: new Date(r.created_at).getTime(), status: r.moderation_status,
+      }));
+    })
+    .catch(e => { remote.msgs[userId] = []; console.warn("[messages]", e); })
+    .finally(() => { delete remote.msgs["_loading_" + userId]; render(); });
+  return false;
+}
+
+const loadingScreen = (title) => ({
+  html:`<div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">${title}</h2></div>
+        <div class="empty"><div class="ico">💚</div><p>Loading…</p></div>`,
+  mount(root){ const b = $("[data-act=back]",root); if(b) b.onclick = ()=> history.length>1 ? history.back() : go("home"); }
+});
+const errorScreen = (title, msg, retry) => ({
+  html:`<div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">${title}</h2></div>
+        <div class="pad stack"><div class="callout coral">⚠️ ${esc(msg||"Something went wrong")}</div>
+        <button class="btn" id="retry">Try again</button></div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
+    $("#retry",root).onclick = ()=>{ resetRemote(); render(); };
+  }
+});
 
 /* ---------------- Router ---------------- */
 const routes = {};
@@ -318,6 +483,9 @@ function parseHash(){
 
 function render(){
   const { name, param } = parseHash();
+
+  // Leaving the chat screen? drop its realtime subscription.
+  if(name !== "chat" && chatUnsub){ try{ chatUnsub(); }catch(e){} chatUnsub = null; }
 
   // Onboarding guard
   const openRoutes = ["welcome","login","invite","signup","readiness","conduct","result"];
@@ -350,10 +518,15 @@ document.addEventListener("click", e=>{
 });
 
 function updateBadge(){
-  const total = Object.values(S.connections).reduce((n,c)=> n + (c.unread||0), 0);
-  const pend  = Object.values(S.connections).filter(c=>c.status==="they_sent").length;
   const b = $("#msg-badge");
-  const count = total + pend;
+  let count;
+  if(Backend.enabled()){
+    count = remote.rel ? inboundList().length : 0;   // pending requests awaiting your reply
+  } else {
+    const total = Object.values(S.connections).reduce((n,c)=> n + (c.unread||0), 0);
+    const pend  = Object.values(S.connections).filter(c=>c.status==="they_sent").length;
+    count = total + pend;
+  }
   if(count>0){ b.hidden=false; b.textContent = count>9?"9+":count; } else b.hidden=true;
 }
 
@@ -410,6 +583,7 @@ route("login", ()=>({
       const btn = $("#login",root); btn.disabled = true; btn.textContent = "Logging in…";
       try{
         await Backend.signIn(email, password);
+        resetRemote();                      // never show the previous session's data
         const prof = await Backend.getProfile();
         if(prof){ S.user = Backend.fromRow(prof); S.onboarded = !!prof.onboarded; save(); }
         toast("Welcome back 💚");
@@ -726,8 +900,11 @@ route("home", ()=>{
   const u = S.user;
   const week = new Date().getDay();
   const prompt = WEEKLY_PROMPTS[week % WEEKLY_PROMPTS.length];
-  const topMatch = rankedMatches()[0];
-  const inbound = Object.entries(S.connections).filter(([,c])=>c.status==="they_sent").length;
+  // In Supabase mode this kicks off the fetch and re-renders when it lands, so
+  // Home paints immediately rather than blocking on the network.
+  const warm = ensureRemote();
+  const topMatch = warm ? matchesList().filter(m => statusFor(m.c.id) !== "blocked")[0] : null;
+  const inbound = warm ? inboundList().length : 0;
   return {
   html:`
   <div class="pad">
@@ -754,7 +931,9 @@ route("home", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your top match</h3><a href="#/matches">See all</a></div>
-    ${topMatch ? matchCardHTML(topMatch) : ""}
+    ${topMatch ? matchCardHTML(topMatch)
+      : !warm ? `<div class="card center"><p class="tiny faint">Finding your matches…</p></div>`
+      : `<div class="card center"><p class="tiny faint">No new matches right now — we release them thoughtfully.</p></div>`}
 
     <div class="sec-h"><h3>Keep growing</h3></div>
     ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
@@ -779,24 +958,24 @@ function openReflection(prompt){
 
 /* ---- Match card + list ---- */
 function matchCardHTML(m){
-  const c = m.c; const st = conn(c.id).status;
+  const c = m.c; const st = statusFor(c.id);
   const cta = st==="connected" ? `<span class="chip">Connected 💬</span>`
             : st==="you_sent"  ? `<span class="chip gold">Interest sent ⏳</span>`
             : st==="they_sent" ? `<span class="chip coral">Interested in you 💌</span>`
             : "";
   return `
   <div class="card match" data-match="${c.id}">
-    <div class="score"><span class="n">${m.pct}%</span> match</div>
+    ${m.pct==null?"":`<div class="score"><span class="n">${m.pct}%</span> match</div>`}
     <div class="top">
       ${avatar(c.name,c.color,"lg")}
       <div class="grow">
-        <div class="row" style="gap:7px"><h3>${esc(c.name)}, ${c.age}</h3> ${c.verified?`<span class="verified">✓ Verified</span>`:""}</div>
-        <p class="tiny faint">${esc(c.career)} · ${esc(c.county)}</p>
+        <div class="row" style="gap:7px"><h3>${esc(c.name)}${c.age?`, ${c.age}`:""}</h3> ${c.verified?`<span class="verified">✓ Verified</span>`:""}</div>
+        <p class="tiny faint">${esc(c.career||"")}${c.career&&c.county?" · ":""}${esc(c.county||"")}</p>
         <div style="margin-top:6px">${cta}</div>
       </div>
     </div>
     <div class="body">
-      <div class="chips">${c.values.slice(0,3).map(v=>`<span class="chip">${v}</span>`).join("")}
+      <div class="chips">${(c.values||[]).slice(0,3).map(v=>`<span class="chip">${esc(v)}</span>`).join("")}
         <span class="chip gold">${intentionLabel(c.intention)}</span></div>
       <div class="reasons stack" style="margin-top:12px">
         ${m.reasons.slice(0,3).map(r=>`<div class="reason"><span class="k">✓</span><span><b>${r.k}:</b> ${esc(r.v)}</span></div>`).join("")}
@@ -811,8 +990,14 @@ function wireMatchCards(root){
 }
 
 route("matches", ()=>{
-  const list = rankedMatches().slice(0,4);   // "a limited number of carefully selected matches"
-  const inbound = rankedMatches().filter(m=>conn(m.c.id).status==="they_sent");
+  if(!ensureRemote()) return loadingScreen("Your matches");
+  if(remote.err) return errorScreen("Your matches", remote.err);
+
+  const inbound = inboundList();
+  const inboundIds = new Set(inbound.map(m => m.c.id));
+  // "a limited number of carefully selected matches" — and don't repeat the
+  // people already shown under "Interested in you"
+  const list = matchesList().filter(m => !inboundIds.has(m.c.id) && statusFor(m.c.id) !== "blocked").slice(0,4);
   return {
   html:`
   <div class="pad">
@@ -823,7 +1008,8 @@ route("matches", ()=>{
       ${inbound.map(matchCardHTML).join("")}` : ""}
 
     <div class="sec-h"><h3>Selected for you</h3></div>
-    ${list.map(matchCardHTML).join("")}
+    ${list.length ? list.map(matchCardHTML).join("")
+      : `<div class="empty"><div class="ico">💞</div><p>No new matches right now.<br>We release them thoughtfully — check back soon.</p></div>`}
 
     <div class="callout gold" style="margin-top:16px">🔄 New matches are released thoughtfully. Take your time with these first.</div>
   </div>`,
@@ -832,9 +1018,17 @@ route("matches", ()=>{
 
 /* ---- Match detail ---- */
 route("match", (id)=>{
-  const c = candidate(id); if(!c) return go("matches");
-  const m = { c, ...scoreMatch(S.user, c) };
-  const st = conn(id).status;
+  if(!ensureRemote()) return loadingScreen("Profile");
+  if(remote.err) return errorScreen("Profile", remote.err);
+
+  const c = cardFor(id);
+  if(!c) return Backend.enabled() ? loadingScreen("Profile") : go("matches");
+
+  // score: server's in Supabase mode, computed locally otherwise
+  const cached = (remote.matches || []).find(x => x.c.id === id);
+  const m = Backend.enabled()
+    ? { c, pct: cached ? cached.pct : null, reasons: matchReasons(S.user, c) }
+    : { c, ...scoreMatch(S.user, c) };
   return {
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Profile</h2>
@@ -842,31 +1036,31 @@ route("match", (id)=>{
   <div class="pad stack center">
     ${avatar(c.name,c.color,"xl")}
     <div>
-      <div class="row" style="justify-content:center;gap:8px"><h2>${esc(c.name)}, ${c.age}</h2>${c.verified?`<span class="verified">✓ Verified</span>`:""}</div>
-      <p class="muted tiny">${esc(c.career)} · ${esc(c.county)}</p>
+      <div class="row" style="justify-content:center;gap:8px"><h2>${esc(c.name)}${c.age?`, ${c.age}`:""}</h2>${c.verified?`<span class="verified">✓ Verified</span>`:""}</div>
+      <p class="muted tiny">${esc(c.career||"")}${c.career&&c.county?" · ":""}${esc(c.county||"")}</p>
     </div>
-    <div class="chip" style="background:var(--teal-700);color:#fff">${m.pct}% compatibility</div>
+    ${m.pct==null?"":`<div class="chip" style="background:var(--teal-700);color:#fff">${m.pct}% compatibility</div>`}
 
-    <div class="card" style="text-align:left">
+    ${c.bio?`<div class="card" style="text-align:left">
       <p style="font-style:italic">"${esc(c.bio)}"</p>
-    </div>
+    </div>`:""}
 
     <div class="card" style="text-align:left">
       <div class="kv"><span class="k">Intention</span><span>${intentionLabel(c.intention)}</span></div>
-      <div class="kv"><span class="k">Faith</span><span>${esc(c.faith)}</span></div>
-      <div class="kv"><span class="k">Education</span><span>${esc(c.education)}</span></div>
-      <div class="kv"><span class="k">Family goals</span><span>${esc(c.familyGoal)}</span></div>
+      <div class="kv"><span class="k">Faith</span><span>${esc(c.faith||"—")}</span></div>
+      <div class="kv"><span class="k">Education</span><span>${esc(c.education||"—")}</span></div>
+      <div class="kv"><span class="k">Family goals</span><span>${esc(c.familyGoal||"—")}</span></div>
     </div>
 
     <div class="card" style="text-align:left">
       <p class="tiny faint" style="margin-bottom:8px">VALUES</p>
-      <div class="chips">${c.values.map(v=>`<span class="chip ${S.user.values.includes(v)?"":"select"}">${v}</span>`).join("")}</div>
+      <div class="chips">${(c.values||[]).map(v=>`<span class="chip ${(S.user.values||[]).includes(v)?"":"select"}">${esc(v)}</span>`).join("")}</div>
     </div>
 
-    <div class="card" style="text-align:left">
+    ${m.reasons.length?`<div class="card" style="text-align:left">
       <p class="tiny faint" style="margin-bottom:8px">WHY YOU MATCH</p>
       <div class="stack">${m.reasons.map(r=>`<div class="reason"><span class="k">✓</span><span><b>${r.k}:</b> ${esc(r.v)}</span></div>`).join("")}</div>
-    </div>
+    </div>`:""}
 
     <div style="width:100%">${connectCTA(id)}</div>
     <p class="tiny faint">Messaging opens only when you both agree to connect.</p>
@@ -879,7 +1073,7 @@ route("match", (id)=>{
 });
 
 function connectCTA(id){
-  const st = conn(id).status;
+  const st = statusFor(id);
   if(st==="connected") return `<button class="btn" data-cta="chat">💬 Open conversation</button>`;
   if(st==="you_sent")  return `<button class="btn" disabled>Interest sent — awaiting reply ⏳</button>`;
   if(st==="they_sent") return `<button class="btn coral" data-cta="accept">💌 Accept & connect</button>`;
@@ -889,11 +1083,46 @@ function connectCTA(id){
 function wireConnectCTA(root, id){
   const btn = $("[data-cta]",root); if(!btn) return;
   const act = btn.dataset.cta;
+  const name = (cardFor(id) || {}).name || "them";
+
+  /* ---- Supabase mode: consent is enforced server-side ---- */
+  if(Backend.enabled()){
+    btn.onclick = async ()=>{
+      if(act==="chat"){ go("chat", id); return; }
+      btn.disabled = true;
+      try{
+        if(act==="express"){
+          const r = await Backend.expressInterest(id);
+          resetRemote();
+          if(r==="connected"){ toast(`You're connected with ${name}!`); go("chat", id); return; }
+          if(r==="blocked"){ toast("You can't connect with this person."); }
+          else toast(`Interest sent to ${name}`);
+          render();
+        }
+        if(act==="accept"){
+          const iid = relInterestId(id);
+          if(!iid){ toast("That request is no longer available"); resetRemote(); render(); return; }
+          const r = await Backend.respondInterest(iid, true);
+          resetRemote();
+          if(r==="connected"){ toast(`You're connected with ${name}!`); go("chat", id); }
+          else { toast("Couldn't accept — please try again"); render(); }
+        }
+        if(act==="unblock"){
+          await Backend.unblockUser(id); resetRemote(); toast("Unblocked"); render();
+        }
+      }catch(e){
+        toast(e.message || "Something went wrong"); btn.disabled = false;
+      }
+    };
+    return;
+  }
+
+  /* ---- Local demo mode: simulate the other side ---- */
   btn.onclick = ()=>{
     const c = conn(id);
     if(act==="chat"){ go("chat", id); return; }
     if(act==="express"){
-      c.status = "you_sent"; save(); toast(`Interest sent to ${candidate(id).name}`);
+      c.status = "you_sent"; save(); toast(`Interest sent to ${name}`);
       // simulate mutual consent shortly after
       setTimeout(()=>{
         if(conn(id).status==="you_sent"){
@@ -917,7 +1146,7 @@ function wireConnectCTA(root, id){
 }
 
 function openSafetySheet(id){
-  const c = candidate(id);
+  const c = cardFor(id) || { name:"this member" };
   const box = sheet(`
     <h3>Safety & privacy</h3>
     <p class="muted tiny" style="margin:6px 0 14px">You're always in control of who you connect with.</p>
@@ -926,32 +1155,44 @@ function openSafetySheet(id){
     <button class="btn ghost" id="cancel" style="margin-top:6px">Cancel</button>`);
   $("#cancel",box.el).onclick = box.close;
   $("#report",box.el).onclick = ()=>{ box.close(); openReport(id); };
-  $("#block",box.el).onclick = ()=>{
-    conn(id).status = "blocked"; save(); box.close();
+  $("#block",box.el).onclick = async ()=>{
+    if(Backend.enabled()){
+      try{ await Backend.blockUser(id); resetRemote(); }
+      catch(e){ toast(e.message || "Could not block"); return; }
+    } else {
+      conn(id).status = "blocked"; save();
+    }
+    box.close();
     toast(`${c.name} blocked`); updateBadge();
     if(parseHash().name==="chat") go("messages"); else render();
   };
 }
 function openReport(id){
-  const c = candidate(id);
+  const c = cardFor(id) || { name:"this member" };
   const reasons = ["Disrespectful or abusive language","Made me feel unsafe","Fake or misleading profile","Pushing for something I didn't consent to","Other concern"];
   const box = sheet(`
     <h3>Report ${esc(c.name)}</h3>
     <p class="muted tiny" style="margin:6px 0 12px">Reports are confidential and reviewed by our counselling team. AI moderation flags abusive language automatically.</p>
-    <div class="stack">${reasons.map((r,i)=>`<label class="row"><input type="radio" name="rr" value="${i}"> <span class="tiny">${r}</span></label>`).join("")}</div>
+    <div class="stack">${reasons.map((r,i)=>`<label class="row"><input type="radio" name="rr" value="${i}"> <span class="tiny">${esc(r)}</span></label>`).join("")}</div>
     <button class="btn coral" id="send" style="margin-top:14px">Submit report</button>`);
-  $("#send",box.el).onclick = ()=>{
-    if(!$('input[name=rr]:checked',box.el)){ toast("Please choose a reason"); return; }
+  $("#send",box.el).onclick = async ()=>{
+    const picked = $('input[name=rr]:checked',box.el);
+    if(!picked){ toast("Please choose a reason"); return; }
+    const btn = $("#send",box.el); btn.disabled = true;
+    if(Backend.enabled()){
+      try{
+        await Backend.reportUser(id, reasons[+picked.value], { from:"profile" });
+      }catch(e){ toast(e.message || "Could not submit report"); btn.disabled = false; return; }
+    }
     box.close(); toast("Report submitted — thank you. Our team will review it.");
   };
 }
 
 /* ---- Messages list ---- */
 route("messages", ()=>{
-  const items = Object.entries(S.connections)
-    .filter(([,c])=> c.status==="connected" || c.status==="they_sent")
-    .map(([id,c])=>({ id, c, cand:candidate(id) }))
-    .filter(x=>x.cand);
+  if(!ensureRemote()) return loadingScreen("Messages");
+  if(remote.err) return errorScreen("Messages", remote.err);
+  const items = threadList();
   return {
   html:`
   <div class="pad">
@@ -988,11 +1229,19 @@ const REPLIES = [
   "I'd like that. Maybe we could talk about it more over coffee sometime?",
   "You have a calm way of saying things. It's nice.",
 ];
+let chatUnsub = null;   // active realtime subscription, if any
 route("chat", (id)=>{
-  const c = candidate(id); if(!c) return go("messages");
-  const cn = conn(id);
-  if(cn.status!=="connected"){ return go("match", id); }
-  cn.unread = 0; save(); updateBadge();
+  if(!ensureRemote()) return loadingScreen("Chat");
+  if(remote.err) return errorScreen("Chat", remote.err);
+
+  const c = cardFor(id);
+  if(!c) return go("messages");
+  if(statusFor(id) !== "connected") return go("match", id);
+  if(!ensureMessages(id)) return loadingScreen(c.name);
+
+  const msgs = Backend.enabled() ? (remote.msgs[id] || []) : conn(id).messages;
+  if(!Backend.enabled()){ conn(id).unread = 0; save(); updateBadge(); }
+
   return {
   html:`
   <div class="chat" style="height:100%">
@@ -1004,7 +1253,7 @@ route("chat", (id)=>{
     </div>
     <div class="chat-scroll" id="scroll">
       <div class="chat-note">🔒 You both agreed to connect. Be kind — messages are moderated for safety.</div>
-      ${cn.messages.map(bubbleHTML).join("")}
+      ${msgs.map(bubbleHTML).join("")}
     </div>
     <div class="composer">
       <input class="input" id="msg" placeholder="Write a message…" autocomplete="off">
@@ -1017,6 +1266,52 @@ route("chat", (id)=>{
     const scroll = $("#scroll",root), input = $("#msg",root);
     const toBottom = ()=> scroll.scrollTop = scroll.scrollHeight;
     toBottom();
+
+    /* ---- Supabase mode: real send + realtime delivery ---- */
+    if(Backend.enabled()){
+      const convId = relConversation(id);
+
+      // tear down any previous subscription, then listen for the other side
+      if(chatUnsub){ try{ chatUnsub(); }catch(e){} chatUnsub = null; }
+      if(convId){
+        chatUnsub = Backend.subscribeMessages(convId, row =>{
+          if(row.sender === remote.rel.me) return;              // our own echo
+          const list = remote.msgs[id] || (remote.msgs[id] = []);
+          if(list.some(m => m.id === row.id)) return;
+          const m = { id:row.id, from:"them", text:row.body, ts:new Date(row.created_at).getTime() };
+          list.push(m);
+          if(parseHash().name === "chat" && parseHash().param === id){
+            scroll.insertAdjacentHTML("beforeend", bubbleHTML(m));
+            toBottom();
+          } else { updateBadge(); }
+        });
+      }
+
+      const send = async ()=>{
+        const text = input.value.trim(); if(!text || !convId) return;
+        input.value = "";
+        try{
+          const res = await Backend.sendMessage(convId, text);
+          const m = { id:res && res.id, from:"me", text, ts:Date.now() };
+          (remote.msgs[id] || (remote.msgs[id] = [])).push(m);
+          scroll.insertAdjacentHTML("beforeend", bubbleHTML(m));
+          toBottom();
+          // the server moderates — tell the sender when it holds something back
+          if(res && res.moderation_status === "flagged"){
+            toast("⚠️ That message was flagged by moderation and is under review.");
+          }
+        }catch(e){
+          input.value = text;   // don't lose what they typed
+          toast(/blocked/i.test(e.message||"") ? "You can't message this person." : (e.message || "Message not sent"));
+        }
+      };
+      $("#send",root).onclick = send;
+      input.addEventListener("keydown", e=>{ if(e.key==="Enter") send(); });
+      return;
+    }
+
+    /* ---- Local demo mode: simulated replies ---- */
+    const cn = conn(id);
     const send = ()=>{
       const text = input.value.trim(); if(!text) return;
       // lightweight AI-moderation demo

@@ -181,6 +181,29 @@ const Backend = (() => {
     if (error) throw error;
     return data || [];
   }
+  /* Everything the matches/chat UI needs to know about who you're linked to.
+     RLS already scopes each table to the current user. */
+  async function relationships(){
+    const user = await getUser();
+    if (!user) return { me: null, interests: [], connections: [], conversations: [], blocks: [] };
+    const [i, c, v, b] = await Promise.all([
+      client.from("interests").select("id, from_user, to_user, status"),
+      client.from("connections").select("user_a, user_b, status"),
+      client.from("conversations").select("id, user_a, user_b"),
+      client.from("blocks").select("blocked"),
+    ]);
+    if (i.error) throw i.error;
+    if (c.error) throw c.error;
+    if (v.error) throw v.error;
+    if (b.error) throw b.error;
+    return {
+      me: user.id,
+      interests: i.data || [],
+      connections: c.data || [],
+      conversations: v.data || [],
+      blocks: (b.data || []).map(x => x.blocked),
+    };
+  }
   async function listConversations(){
     const { data, error } = await client.from("conversations").select("*").order("created_at", { ascending: false });
     if (error) throw error;
@@ -387,7 +410,7 @@ const Backend = (() => {
     saveReadiness, saveConsent,
     // Phase 1
     getMatches, memberCard, expressInterest, respondInterest,
-    blockUser, unblockUser, reportUser, inboundInterests,
+    blockUser, unblockUser, reportUser, inboundInterests, relationships,
     listConversations, listMessages, sendMessage, subscribeMessages,
     // Phase 2
     listCounsellors, openSlots, bookSession, cancelBooking, listBookings,
