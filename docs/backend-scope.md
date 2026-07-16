@@ -201,7 +201,7 @@ versioned JSON/CDN or a lightweight `content` table; only *progress* is per-user
 | **0 — Foundations** ✅ *schema built* | Auth, profiles, invites, readiness + wellness score, consent capture, RLS, verification, audit log. | 3–4 weeks |
 | **1 — Core loop** ✅ *schema built* | Server-side matching, interests/consent, realtime messaging, moderation pipeline, reporting/blocking, crisis-safety hooks. | 4–5 weeks |
 | **2 — Counselling** ✅ *schema built* | Counsellor accounts & dashboard, availability + bookings, video sessions, confidential Q&A, notifications (push/SMS/email). | 4–5 weeks |
-| **3 — Monetisation & community** | Premium subscriptions via M-Pesa + card, webinars, support/community groups with moderation, events + RSVP. | 4–5 weeks |
+| **3 — Monetisation & community** ✅ *schema built* | Premium subscriptions via M-Pesa + card, webinars, support/community groups with moderation, events + RSVP. | 4–5 weeks |
 | **4 — Couples & prep** | Couple Space (shared, RLS-scoped), marriage-prep tracking, richer counsellor dashboard & analytics. | 3–4 weeks |
 
 Rough MVP (Phases 0–1) that makes the app genuinely usable and safe with real
@@ -250,10 +250,14 @@ throwing away front-end work already done.*
 
 ## 11. Build status
 
-Phases 0–2 exist as reviewed migrations in [`../supabase/migrations/`](../supabase/migrations/)
+Phases 0–3 exist as reviewed migrations in [`../supabase/migrations/`](../supabase/migrations/)
 with matching client methods in `../backend.js`. Phase 0's onboarding is wired
-into the UI; Phase 1/2 client methods are ready but the UI still runs on
-`localStorage`.
+into the UI; Phase 1–3 client methods are ready but the UI still runs on
+`localStorage`. Phase 4 (Couple Space) is the remaining feature area.
+
+Payments still need their **Edge Functions** (M-Pesa Daraja STK push + webhook
+verification); the database side is done and deliberately refuses to grant
+entitlement from anything but a verified server-side callback.
 
 **The main outstanding risk is validation debt**: none of the SQL has been
 executed against a live Postgres yet. Before building Phase 3, the highest-value

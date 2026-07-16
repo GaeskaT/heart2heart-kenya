@@ -269,6 +269,117 @@ const Backend = (() => {
     if (error) throw error;
   }
 
+  /* ---- Phase 3: subscriptions, community & events ---- */
+
+  // Billing. NOTE: the client never handles payment credentials. It only asks
+  // for an intent; an Edge Function drives M-Pesa STK push / hosted checkout,
+  // and entitlement is granted server-side from a verified provider webhook.
+  async function listPlans(){
+    const { data, error } = await client.from("plans").select("*").eq("active", true).order("sort");
+    if (error) throw error;
+    return data || [];
+  }
+  async function mySubscription(){
+    const { data, error } = await client.rpc("my_subscription");
+    if (error) throw error;
+    return (data && data[0]) || null;
+  }
+  async function hasPremium(){
+    const { data, error } = await client.rpc("has_premium", {});
+    if (error) throw error;
+    return data === true;
+  }
+  async function createPaymentIntent(planId, provider){
+    const { data, error } = await client.rpc("create_payment_intent", { plan: planId, prov: provider });
+    if (error) throw error;
+    return data;   // payment id — hand to the Edge Function that calls the provider
+  }
+  async function cancelSubscription(){
+    const { error } = await client.rpc("cancel_subscription");
+    if (error) throw error;
+  }
+  async function listPayments(){
+    const { data, error } = await client.from("payments")
+      .select("id, amount_kes, currency, provider, status, purpose, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  /* Webinars */
+  async function listWebinars(){
+    const { data, error } = await client.from("webinars")
+      .select("id, title, blurb, starts_at, duration_mins, premium_only, capacity")
+      .eq("active", true).order("starts_at");
+    if (error) throw error;
+    return data || [];
+  }
+  async function registerWebinar(id){
+    const { data, error } = await client.rpc("register_webinar", { w: id });
+    if (error) throw error;
+    return data;   // 'registered' | 'premium_required' | 'full'
+  }
+  async function cancelWebinar(id){
+    const { error } = await client.rpc("cancel_webinar", { w: id });
+    if (error) throw error;
+  }
+  async function myWebinars(){
+    const { data, error } = await client.from("webinar_registrations").select("webinar_id");
+    if (error) throw error;
+    return (data || []).map(r => r.webinar_id);
+  }
+
+  /* Community */
+  async function listGroups(){
+    const { data, error } = await client.from("community_groups")
+      .select("id, slug, name, description, icon").eq("active", true);
+    if (error) throw error;
+    return data || [];
+  }
+  async function myGroups(){
+    const { data, error } = await client.from("community_memberships").select("group_id");
+    if (error) throw error;
+    return (data || []).map(r => r.group_id);
+  }
+  async function joinGroup(id){ const { error } = await client.rpc("join_group",  { g: id }); if (error) throw error; }
+  async function leaveGroup(id){ const { error } = await client.rpc("leave_group", { g: id }); if (error) throw error; }
+  async function listPosts(groupId){
+    const { data, error } = await client.from("community_posts")
+      .select("id, author, body, moderation_status, created_at")
+      .eq("group_id", groupId).order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+  async function postToGroup(groupId, body){
+    const { data, error } = await client.rpc("post_to_group", { g: groupId, body });
+    if (error) throw error;
+    return (data && data[0]) || null;   // { id, moderation_status }
+  }
+  async function reportPost(postId, reason){
+    const { error } = await client.rpc("report_post", { post: postId, reason });
+    if (error) throw error;
+  }
+
+  /* Events */
+  async function listEvents(){
+    const { data, error } = await client.from("events")
+      .select("id, title, kind, blurb, icon, starts_at, location, price_kes, capacity")
+      .eq("active", true).order("starts_at");
+    if (error) throw error;
+    return data || [];
+  }
+  async function rsvpEvent(id){
+    const { data, error } = await client.rpc("rsvp_event", { e: id });
+    if (error) throw error;
+    return data;   // 'going' | 'waitlist'
+  }
+  async function cancelRsvp(id){ const { error } = await client.rpc("cancel_rsvp", { e: id }); if (error) throw error; }
+  async function myRsvps(){
+    const { data, error } = await client.from("event_rsvps").select("event_id, status");
+    if (error) throw error;
+    return data || [];
+  }
+
   return {
     init, enabled, configured,
     signUp, signIn, signOut, getUser,
@@ -282,5 +393,10 @@ const Backend = (() => {
     listCounsellors, openSlots, bookSession, cancelBooking, listBookings,
     askQuestion, listQuestions, listNotifications, markNotificationRead,
     counsellorClients, answerQuestion,
+    // Phase 3
+    listPlans, mySubscription, hasPremium, createPaymentIntent, cancelSubscription, listPayments,
+    listWebinars, registerWebinar, cancelWebinar, myWebinars,
+    listGroups, myGroups, joinGroup, leaveGroup, listPosts, postToGroup, reportPost,
+    listEvents, rsvpEvent, cancelRsvp, myRsvps,
   };
 })();

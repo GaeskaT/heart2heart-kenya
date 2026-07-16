@@ -13,6 +13,10 @@ order (`0001`, then `0002`, …).
   availability + bookings, video rooms, confidential Q&A, clinical notes and
   notifications. Also **tightens Phase 0's profile access**. See
   [Phase 2](#phase-2--counselling-0003) below.
+- **Phase 3 — Monetisation & community** (`0004`): plans, subscriptions and
+  M-Pesa / card payments (webhook-reconciled), premium entitlements, webinars,
+  moderated community groups, events + RSVP. Also **hardens function grants
+  across all phases**. See [Phase 3](#phase-3--monetisation--community-0004).
 
 See [`../docs/backend-scope.md`](../docs/backend-scope.md) for the full backend
 plan and later phases.
@@ -196,7 +200,54 @@ Client methods are in `../backend.js` (`listCounsellors`, `openSlots`,
 `bookSession`, `cancelBooking`, `askQuestion`, `listNotifications`,
 `counsellorClients`, …).
 
+## Phase 3 — Monetisation & community (`0004`)
+
+| Object | Purpose |
+|---|---|
+| `plans` | Free / Premium / Premium+ (seeded to match the app). Admin-editable. |
+| `subscriptions` | One active row per member; drives entitlement. |
+| `payments` | Payment **intents + outcomes** — references only, never credentials. |
+| `payment_events` | Raw verified webhook payloads, idempotent. **service_role only.** |
+| `webinars` / `webinar_registrations` | Live sessions, optionally premium-only, with capacity. |
+| `community_groups` / `community_memberships` / `community_posts` | Moderated discussion. |
+| `events` / `event_rsvps` | Gatherings with capacity + automatic waitlist. |
+
+### Payments — how money actually moves
+
+**No card numbers, CVVs, PINs or M-Pesa credentials are ever stored here or
+handled by the client.** The flow is deliberately narrow:
+
+1. Client calls `create_payment_intent(plan, provider)` → a **pending** payment row.
+2. An **Edge Function** calls M-Pesa **Daraja STK push** (member approves on their
+   own handset) or opens a provider-**hosted** card checkout.
+3. The provider calls back → the Edge Function **verifies** it, records a
+   `payment_events` row (idempotency key = e.g. `CheckoutRequestID`), then calls
+   `activate_subscription()`.
+4. `activate_subscription()` is **granted to `service_role` only** — a member
+   cannot grant themselves premium, and a client-reported "payment success" is
+   never trusted. It's also idempotent, since providers retry callbacks.
+
+Entitlement is read via `has_premium()`, used to gate e.g. premium-only webinars.
+
+### Community & events
+
+- `post_to_group()` runs the **same moderation + crisis screen** as private
+  messaging, so a distress signal in a group post also raises a `safety_flag`.
+- Posts are visible to **group members only**; blocked posts are hidden from
+  everyone but the author and staff. `report_post()` feeds the Phase 1 reports
+  queue; `moderate_post()` lets staff hide content.
+- `rsvp_event()` **auto-waitlists** once capacity is reached.
+
+### Hardening (applies to phases 0–3)
+
+Postgres grants `EXECUTE` on new functions to `PUBLIC` **by default** — which
+meant the `anon` role could call our RPCs. Section 9 of `0004` revokes execute
+from `public, anon` across every function in `public`, then re-grants only the
+member-callable surface to `authenticated` (and `activate_subscription` to
+`service_role`). Add any new function to that grant list, or it will be
+unreachable from the client.
+
 ## Not yet built
 
-Payments (M-Pesa + card), couple space, community groups, and events come in
-later phases (see the scope doc).
+Couple Space (shared journal/goals/budget) is the remaining feature area — see
+the scope doc's Phase 4.
