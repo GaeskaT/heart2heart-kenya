@@ -21,18 +21,21 @@ order (`0001`, then `0002`, …).
 See [`../docs/backend-scope.md`](../docs/backend-scope.md) for the full backend
 plan and later phases.
 
-> **Status: verified.** All four migrations apply cleanly and their security
-> policies are proven by an automated suite — **52 assertions, 0 failures** —
-> which runs the real migrations against an embedded Postgres and impersonates
-> member / counsellor / admin / anon sessions. See [`tests/`](tests/):
+- **`0005`** — fixes the admin/counsellor bootstrap, which silently did nothing
+  on every project before it. See [Bootstrap the first admin](#bootstrap-the-first-admin).
+
+> **Status: verified.** All migrations apply cleanly and their security policies
+> are proven by an automated suite — **53 assertions, 0 failures** — which runs
+> the real migrations against an embedded Postgres and impersonates member /
+> counsellor / admin / anon sessions. See [`tests/`](tests/):
 >
 > ```bash
-> cd supabase/tests && npm install && npm test
+> cd supabase/tests && npm install && npm test   # offline, 53 assertions
+> node live-smoke.mjs                            # against a hosted project, 28
 > ```
 >
-> They have not yet run against a hosted Supabase project (auth flows and
-> provider webhooks still need a real project), but the schema, RLS and RPCs
-> are no longer taken on trust.
+> Not yet covered: provider webhooks (M-Pesa/card) and the Edge Functions for
+> real moderation, video tokens and notification fan-out.
 
 ## What it creates
 
@@ -66,8 +69,9 @@ Paste `migrations/0001_phase0_foundations.sql` into the dashboard SQL editor and
 
 ## Bootstrap the first admin
 
-Roles can't be self-assigned (the schema blocks it). After you sign up once,
-promote yourself from the SQL editor (runs as service role):
+Members cannot assign roles to themselves — the schema blocks it. So the first
+admin has to be promoted from the **SQL editor**, which runs without a JWT and
+is therefore trusted:
 
 ```sql
 update public.profiles set role = 'admin'
@@ -76,6 +80,22 @@ update public.profiles set role = 'admin'
 insert into public.counsellor_invites (code, issued_by)
   values ('H2H-KE-2026', (select id from auth.users where email = 'you@example.com'));
 ```
+
+Onboarding a counsellor works the same way (there is deliberately no self-serve
+path — `counsellors` has no INSERT policy):
+
+```sql
+update public.profiles set role = 'counsellor' where id = '<user-uuid>';
+insert into public.counsellors (id, title, specialties)
+  values ('<user-uuid>', 'Clinical Psychologist', array['Trauma']);
+```
+
+> ⚠️ This needs migration **`0005`**. Before it, `protect_profile_columns()`
+> clamped `role` whenever `is_admin()` was false — and since `auth.uid()` is
+> NULL in the SQL editor, the statements above reported success while silently
+> reverting. No admin or counsellor could ever be created. `0005` restricts the
+> clamp to real end-user requests. Members are still blocked from
+> self-promotion, and both properties are asserted in [`tests/`](tests/).
 
 ## Access model (RLS summary)
 

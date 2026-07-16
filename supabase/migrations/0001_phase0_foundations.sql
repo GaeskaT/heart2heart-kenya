@@ -155,11 +155,18 @@ begin
   return new;
 end $$;
 
--- prevent members from escalating their own role or self-verifying
+-- Prevent members from escalating their own role or self-verifying.
+--
+-- Only clamp when a JWT is actually present (i.e. a real end-user request) and
+-- that user isn't an admin. A session with NO JWT is the service_role / SQL
+-- editor, which RLS already gates and which must be able to bootstrap the first
+-- admin and onboard counsellors. Triggers fire even for superusers, so without
+-- this exemption `update profiles set role=...` in the SQL editor silently
+-- reverts and no admin or counsellor can ever be created.
 create or replace function public.protect_profile_columns()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if not public.is_admin() then
+  if auth.uid() is not null and not public.is_admin() then
     new.role     := old.role;
     new.verified := old.verified;
   end if;

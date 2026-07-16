@@ -3,8 +3,7 @@
 -- GENERATED FILE — do not edit. Source of truth: supabase/migrations/*.sql
 -- Regenerate: bash supabase/build-setup.sh
 --
--- Paste this whole file into the Supabase SQL editor and Run. Idempotent-ish:
--- safe to re-run on a fresh project.
+-- Paste this whole file into the Supabase SQL editor and Run.
 -- ============================================================================
 
 
@@ -169,11 +168,18 @@ begin
   return new;
 end $$;
 
--- prevent members from escalating their own role or self-verifying
+-- Prevent members from escalating their own role or self-verifying.
+--
+-- Only clamp when a JWT is actually present (i.e. a real end-user request) and
+-- that user isn't an admin. A session with NO JWT is the service_role / SQL
+-- editor, which RLS already gates and which must be able to bootstrap the first
+-- admin and onboard counsellors. Triggers fire even for superusers, so without
+-- this exemption `update profiles set role=...` in the SQL editor silently
+-- reverts and no admin or counsellor can ever be created.
 create or replace function public.protect_profile_columns()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if not public.is_admin() then
+  if auth.uid() is not null and not public.is_admin() then
     new.role     := old.role;
     new.verified := old.verified;
   end if;
@@ -1817,3 +1823,38 @@ do $$ begin alter publication supabase_realtime add table public.subscriptions; 
 --  • Refunds/chargebacks: add a payment_events-driven path that sets
 --    payments.status='refunded' and subscriptions.status='cancelled'.
 -- ============================================================================
+
+-- ############################################################################
+-- ## 0005_fix_admin_bootstrap.sql
+-- ############################################################################
+
+-- ============================================================================
+-- Fix: the admin/counsellor bootstrap silently did nothing.
+--
+-- protect_profile_columns() clamped role/verified whenever is_admin() was
+-- false. Triggers fire for superusers too, and in the Supabase SQL editor
+-- auth.uid() is NULL — so is_admin() was false and the documented bootstrap
+--
+--     update public.profiles set role = 'admin' where id = ...;
+--
+-- reported success while silently reverting the change. The result: no admin
+-- and no counsellor could ever be created, on any project.
+--
+-- Now we only clamp for real end-user requests (a JWT is present) that aren't
+-- admin. A session with no JWT is the service_role / SQL editor, which RLS
+-- already gates. Members are still fully blocked from self-promotion — proven
+-- by supabase/tests ("member CANNOT escalate own role").
+--
+-- Safe to re-run. Included in 0001 for fresh installs; this migration exists
+-- so already-deployed projects pick up the fix.
+-- ============================================================================
+
+create or replace function public.protect_profile_columns()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    new.role     := old.role;
+    new.verified := old.verified;
+  end if;
+  return new;
+end $$;

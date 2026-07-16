@@ -77,9 +77,10 @@ for (const f of migrations) {
 /* ---------- 2. seed users ---------- */
 section("Seeding test users");
 await actAsSuper();
-// The privilege-guard trigger would (correctly) refuse to let us set roles
-// without an admin JWT, so disable it just for seeding.
-await db.exec("alter table public.profiles disable trigger profiles_protect_cols");
+// NOTE: no trigger-disabling here. Seeding runs exactly as the Supabase SQL
+// editor does (superuser, no JWT), which is precisely the path that used to
+// silently revert role changes. If the bootstrap regresses, seeding breaks and
+// the counsellor tests below fail loudly.
 for (const [k, id] of Object.entries(U)) {
   await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${k}@test.local`]);
 }
@@ -97,8 +98,16 @@ await db.exec(`
   update public.profiles set full_name='Admin',        role='admin',      onboarded=true where id='${U.admin}';
   insert into public.counsellors (id, title, specialties) values ('${U.counsellor}','Clinical Psychologist', array['Trauma']);
 `);
-await db.exec("alter table public.profiles enable trigger profiles_protect_cols");
 console.log("  ✓ 5 users (2 matched members, 1 unrelated member, counsellor, admin)");
+
+// The bootstrap path itself is a regression test: an admin/SQL-editor session
+// (superuser, no JWT) MUST be able to assign roles, or nobody can ever be made
+// a counsellor or admin.
+{
+  const r = await rows(`select role from public.profiles where id=$1`, [U.counsellor]);
+  ok("admin bootstrap works (SQL-editor session can assign roles)", r[0].role === "counsellor",
+     `role=${r[0].role} — protect_profile_columns is over-clamping`);
+}
 
 /* ---------- 3. profiles: members must not see each other ---------- */
 section("Profiles — privacy");
