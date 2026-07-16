@@ -329,8 +329,15 @@ function seedInbound(){
    returns true (cache warm) or kicks off a fetch and re-renders
    when it lands. Local mode never touches any of this.
    ============================================================ */
-const remote = { matches:null, rel:null, cards:{}, msgs:{}, loading:false, err:null };
-function resetRemote(){ remote.matches=null; remote.rel=null; remote.cards={}; remote.msgs={}; remote.err=null; }
+const remote = { matches:null, rel:null, cards:{}, msgs:{}, loading:false, err:null,
+                 counsellors:null, bookings:null, questions:null, slots:{}, cLoading:false, cErr:null };
+function resetRemote(){
+  remote.matches=null; remote.rel=null; remote.cards={}; remote.msgs={}; remote.err=null;
+  resetCounsellingCache();
+}
+function resetCounsellingCache(){
+  remote.counsellors=null; remote.bookings=null; remote.questions=null; remote.slots={}; remote.cErr=null;
+}
 
 /* server profile row -> the shape the existing UI already renders */
 function cardFromRow(r){
@@ -371,6 +378,75 @@ function ensureRemote(){
     .catch(e => { remote.err = e.message || String(e); console.warn("[remote]", e); })
     .finally(() => { remote.loading = false; render(); });
   return false;
+}
+
+/* ---- Phase 2: counselling (counsellors, bookings, confidential Q&A) ---- */
+async function loadCounselling(){
+  const [counsellors, bookings, questions] = await Promise.all([
+    Backend.listCounsellors(),
+    Backend.listBookings(),
+    Backend.listQuestions(),
+  ]);
+  // counsellors table carries title/specialties; the display name lives on profiles
+  const named = await Promise.all(counsellors.map(async c => {
+    const card = await Backend.memberCard(c.id).catch(() => null);
+    return { ...c, name: card ? (card.full_name || "Counsellor") : "Counsellor",
+             color: (card && card.avatar_color) || "#0f6f6a" };
+  }));
+  remote.counsellors = named;
+  remote.bookings = bookings;
+  remote.questions = questions;
+}
+function ensureCounselling(){
+  if(!Backend.enabled()) return true;
+  if(remote.counsellors && remote.bookings && remote.questions) return true;
+  if(remote.cLoading) return false;
+  remote.cLoading = true; remote.cErr = null;
+  loadCounselling()
+    .catch(e => { remote.cErr = e.message || String(e); console.warn("[counselling]", e); })
+    .finally(() => { remote.cLoading = false; render(); });
+  return false;
+}
+/* open slots for one counsellor, loaded on demand */
+function ensureSlots(counsellorId){
+  if(!Backend.enabled() || !counsellorId) return true;
+  if(remote.slots[counsellorId]) return true;
+  if(remote.slots["_l_" + counsellorId]) return false;
+  remote.slots["_l_" + counsellorId] = true;
+  Backend.openSlots(counsellorId)
+    .then(rows => { remote.slots[counsellorId] = rows; })
+    .catch(e => { remote.slots[counsellorId] = []; console.warn("[slots]", e); })
+    .finally(() => { delete remote.slots["_l_" + counsellorId]; render(); });
+  return false;
+}
+
+/* mode-agnostic counselling accessors */
+function counsellorsList(){
+  if(!Backend.enabled()) return COUNSELLORS;
+  return (remote.counsellors || []).map(c => ({
+    id:c.id, name:c.name, color:c.color, title:c.title || "Counsellor",
+    focus:c.specialties || [], bio:c.bio || "",
+  }));
+}
+function counsellorNamed(id){ return counsellorsList().find(c => c.id === id) || null; }
+/* upcoming bookings, normalised to what the UI already renders */
+function bookingsList(){
+  if(!Backend.enabled()) return upcomingBookings();
+  return (remote.bookings || [])
+    .filter(b => b.status === "scheduled")
+    .map(b => ({
+      id:b.id, counsellor:b.counsellor_id, type:b.session_type, format:b.format,
+      date:b.scheduled_at, time:new Date(b.scheduled_at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
+      video_room:b.video_room, remote:true,
+    }))
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+}
+function questionsList(){
+  if(!Backend.enabled()) return couns().questions;
+  return (remote.questions || []).map(q => ({
+    id:q.id, text:q.body, ts:new Date(q.created_at).getTime(),
+    reply:(q.question_replies && q.question_replies[0]) ? q.question_replies[0].body : null,
+  }));
 }
 
 /* ---- relationship state derived from the server tables ---- */
@@ -938,7 +1014,15 @@ route("home", ()=>{
     <div class="sec-h"><h3>Keep growing</h3></div>
     ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
     ${(()=>{ const m=moodToday(); const sub = m ? `Today: ${MOODS.find(x=>x.score===m.score)?.emoji} ${MOODS.find(x=>x.score===m.score)?.label} · tap to check in` : "Mood, gratitude, breathing & reflection"; return featureRow("wellness","🧘","Wellness Tools",sub); })()}
-    ${(()=>{ const up=upcomingBookings()[0]; const sub = up ? `Next: ${counsellorById(up.counsellor)?.name?.split(' ').slice(-1)} · ${fmtDate(new Date(up.date))}` : "Book a session, ask, or join a group"; return featureRow("counselling","🧑‍⚕️","Counsellor Support",sub); })()}
+    ${(()=>{
+      // don't block Home on the network; show the generic sub until it's warm
+      const warmC = Backend.enabled() ? (remote.bookings !== null) : true;
+      const up = warmC ? bookingsList()[0] : null;
+      const cn = up ? (Backend.enabled() ? counsellorNamed(up.counsellor) : counsellorById(up.counsellor)) : null;
+      const sub = up ? `Next: ${(cn&&cn.name?cn.name.split(' ').slice(-1)[0]:"session")} · ${fmtDate(new Date(up.date))}`
+                     : "Book a session, ask, or join a group";
+      return featureRow("counselling","🧑‍⚕️","Counsellor Support",sub);
+    })()}
   </div>`,
   mount(root){
     $("#reflect",root).onclick = ()=> openReflection(WEEKLY_PROMPTS[new Date().getDay()%WEEKLY_PROMPTS.length]);
@@ -1808,9 +1892,11 @@ function relTime(ts){
 
 /* ---- Counselling hub ---- */
 route("counselling", ()=>{
-  const up = upcomingBookings();
-  const q = couns().questions;
-  const wCount = couns().webinars.length, gCount = couns().groups.length;
+  if(!ensureCounselling()) return loadingScreen("Counsellor Support");
+  if(remote.cErr) return errorScreen("Counsellor Support", remote.cErr);
+  const up = bookingsList();
+  const q = questionsList();
+  const wCount = couns().webinars.length, gCount = couns().groups.length;   // webinars/groups are Phase 3
   const openQ = q.filter(x=>!x.reply).length;
   return {
   html:`
@@ -1871,7 +1957,7 @@ route("counselling", ()=>{
 });
 
 function bookingCardHTML(b){
-  const cn = counsellorById(b.counsellor);
+  const cn = Backend.enabled() ? counsellorNamed(b.counsellor) : counsellorById(b.counsellor);
   const st = SESSION_TYPES.find(s=>s.id===b.type);
   const fmt = SESSION_FORMATS.find(f=>f.id===b.format);
   return `
@@ -1886,7 +1972,7 @@ function bookingCardHTML(b){
     </div>
     <div class="callout teal" style="margin-top:12px">📅 ${fmtDate(new Date(b.date))} at ${b.time}</div>
     <div class="row" style="gap:8px;margin-top:12px">
-      ${b.format==="video"?`<button class="btn sm" data-join="${b.id}" style="flex:1">🎥 Join video call</button>`:""}
+      ${b.format==="video"?`<button class="btn sm" data-join-video="${b.id}" style="flex:1">🎥 Join video call</button>`:""}
       <button class="btn sm secondary" data-cancel="${b.id}" style="flex:1">Cancel</button>
     </div>
   </div>`;
@@ -1900,11 +1986,34 @@ function openResource(r){
   $("#close",box.el).onclick = box.close;
 }
 
-/* ---- Booking flow ---- */
-let bookDraft = { type:"refresher", counsellor:"cn1", format:"video", date:null, time:null };
+/* ---- Booking flow ----
+   Local mode invents a day/time grid. In Supabase mode we book REAL
+   availability_slots published by the counsellor, so the picker shows their
+   actual openings and book_session() claims one atomically. */
+const emptyDraft = () => ({ type:"refresher", counsellor:null, format:"video", date:null, time:null, slot:null });
+let bookDraft = emptyDraft();
 route("book", ()=>{
+  if(!ensureCounselling()) return loadingScreen("Book a session");
+  if(remote.cErr) return errorScreen("Book a session", remote.cErr);
+
+  const cns = counsellorsList();
+  if(!bookDraft.counsellor) bookDraft.counsellor = cns[0] ? cns[0].id : null;
+
   const days = next7Days();
-  if(!bookDraft.date) bookDraft.date = days[0].key;
+  if(!Backend.enabled() && !bookDraft.date) bookDraft.date = days[0].key;
+
+  // Supabase mode: real openings for the selected counsellor
+  const slotsReady = Backend.enabled() ? ensureSlots(bookDraft.counsellor) : true;
+  const slots = Backend.enabled() ? (remote.slots[bookDraft.counsellor] || []) : [];
+
+  if(Backend.enabled() && !cns.length){
+    return {
+      html:`<div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Book a session</h2></div>
+        <div class="pad stack"><div class="callout gold">🧑‍⚕️ No counsellors are available yet. Once your counselling team publishes their availability, you'll be able to book here.</div></div>`,
+      mount(root){ $("[data-act=back]",root).onclick = ()=> go("counselling"); }
+    };
+  }
+
   return {
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Book a session</h2></div>
@@ -1921,7 +2030,7 @@ route("book", ()=>{
     <div>
       <span class="fld-lbl">Counsellor</span>
       <div class="stack" style="margin-top:8px">
-        ${COUNSELLORS.map(c=>`<button class="pickrow ${bookDraft.counsellor===c.id?"on":""}" data-cn="${c.id}">
+        ${cns.map(c=>`<button class="pickrow ${bookDraft.counsellor===c.id?"on":""}" data-cn="${c.id}">
           ${avatar(c.name,c.color,"sm")}
           <div class="grow" style="text-align:left"><b>${esc(c.name)}</b><div class="sub">${esc(c.title)}</div></div></button>`).join("")}
       </div>
@@ -1934,6 +2043,18 @@ route("book", ()=>{
       </div>
     </div>
 
+    ${Backend.enabled() ? `
+    <div>
+      <span class="fld-lbl">Available times</span>
+      ${!slotsReady ? `<p class="tiny faint" style="margin-top:8px">Loading their availability…</p>`
+        : slots.length ? `<div class="chips" style="margin-top:8px">
+            ${slots.map(s=>{
+              const d = new Date(s.starts_at);
+              return `<button class="chip select ${bookDraft.slot===s.id?"on":""}" data-slot="${s.id}">${fmtDate(d)} · ${d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</button>`;
+            }).join("")}
+          </div>`
+        : `<div class="callout gold" style="margin-top:8px">📅 This counsellor has no open times in the next 30 days. Try another counsellor.</div>`}
+    </div>` : `
     <div>
       <span class="fld-lbl">Choose a day</span>
       <div class="chips" style="margin-top:8px">
@@ -1946,7 +2067,7 @@ route("book", ()=>{
       <div class="chips" style="margin-top:8px">
         ${SLOT_TIMES.map(t=>`<button class="chip select ${bookDraft.time===t?"on":""}" data-time="${t}">${t}</button>`).join("")}
       </div>
-    </div>
+    </div>`}
 
     <button class="btn" id="confirm">Confirm booking</button>
     <p class="tiny faint center">You'll get a reminder before your session. You can cancel anytime.</p>
@@ -1955,16 +2076,41 @@ route("book", ()=>{
     $("[data-act=back]",root).onclick = ()=> go("counselling");
     const rerender = ()=> render();
     $$("[data-type]",root).forEach(b=> b.onclick = ()=>{ bookDraft.type=b.dataset.type; rerender(); });
-    $$("[data-cn]",root).forEach(b=> b.onclick = ()=>{ bookDraft.counsellor=b.dataset.cn; rerender(); });
+    $$("[data-cn]",root).forEach(b=> b.onclick = ()=>{ bookDraft.counsellor=b.dataset.cn; bookDraft.slot=null; rerender(); });
     $$("[data-fmt]",root).forEach(b=> b.onclick = ()=>{ bookDraft.format=b.dataset.fmt; rerender(); });
     $$("[data-day]",root).forEach(b=> b.onclick = ()=>{ bookDraft.date=b.dataset.day; rerender(); });
     $$("[data-time]",root).forEach(b=> b.onclick = ()=>{ bookDraft.time=b.dataset.time; rerender(); });
-    $("#confirm",root).onclick = ()=>{
+    $$("[data-slot]",root).forEach(b=> b.onclick = ()=>{ bookDraft.slot=b.dataset.slot; rerender(); });
+
+    $("#confirm",root).onclick = async ()=>{
+      const cn = Backend.enabled() ? counsellorNamed(bookDraft.counsellor) : counsellorById(bookDraft.counsellor);
+      const shortName = (cn && cn.name ? cn.name.split(" ").slice(-1)[0] : "your counsellor");
+
+      if(Backend.enabled()){
+        if(!bookDraft.slot){ toast("Please choose an available time"); return; }
+        const btn = $("#confirm",root); btn.disabled = true; btn.textContent = "Booking…";
+        try{
+          await Backend.bookSession(bookDraft.slot, bookDraft.type, bookDraft.format);
+          bookDraft = emptyDraft();
+          resetCounsellingCache();               // slot is now taken; refetch
+          toast(`Session booked with ${shortName} ✓`);
+          go("counselling");
+        }catch(e){
+          const msg = /slot_unavailable/i.test(e.message||"")
+            ? "Someone just took that time — please pick another."
+            : (e.message || "Could not book");
+          toast(msg);
+          delete remote.slots[bookDraft.counsellor];   // refresh their openings
+          btn.disabled = false; btn.textContent = "Confirm booking";
+          render();
+        }
+        return;
+      }
+
       if(!bookDraft.time){ toast("Please choose a time"); return; }
       addBooking({ type:bookDraft.type, counsellor:bookDraft.counsellor, format:bookDraft.format, date:bookDraft.date, time:bookDraft.time });
-      const cn = counsellorById(bookDraft.counsellor);
-      bookDraft = { type:"refresher", counsellor:"cn1", format:"video", date:null, time:null };
-      toast(`Session booked with ${cn.name.split(" ").slice(-1)} ✓`);
+      bookDraft = emptyDraft();
+      toast(`Session booked with ${shortName} ✓`);
       go("counselling");
     };
   }};
@@ -1972,7 +2118,9 @@ route("book", ()=>{
 
 /* ---- Confidential Q&A ---- */
 route("ask", ()=>{
-  const q = couns().questions;
+  if(!ensureCounselling()) return loadingScreen("Ask a question");
+  if(remote.cErr) return errorScreen("Ask a question", remote.cErr);
+  const q = questionsList();
   return {
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Ask a question</h2></div>
@@ -2000,9 +2148,24 @@ route("ask", ()=>{
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> go("counselling");
-    $("#qsend",root).onclick = ()=>{
+    $("#qsend",root).onclick = async ()=>{
       const t = $("#qtext",root).value.trim();
       if(t.length<5){ toast("Please write your question first"); return; }
+
+      if(Backend.enabled()){
+        const btn = $("#qsend",root); btn.disabled = true; btn.textContent = "Sending…";
+        try{
+          // ask_question() also runs the crisis-safety detector server-side
+          await Backend.askQuestion(t);
+          remote.questions = null;              // refetch so it appears
+          toast("Sent confidentially 💚");
+          render();
+        }catch(e){
+          toast(e.message || "Could not send"); btn.disabled = false; btn.textContent = "Send confidentially";
+        }
+        return;
+      }
+
       const q = addQuestion(t);
       toast("Sent confidentially 💚");
       render();
@@ -2078,14 +2241,32 @@ route("groups", ()=>({
   }
 }));
 
-/* Booking join / cancel handlers are wired on the hub via delegation below */
-document.addEventListener("click", e=>{
-  const join = e.target.closest("[data-join]");
-  if(join && join.dataset.join && join.dataset.join.startsWith("b")){
+/* Booking join / cancel are wired on the hub via delegation.
+   (Uses its own data-join-video attribute — real booking ids are UUIDs, so we
+   can't identify them by prefix the way the local demo ids allowed.) */
+document.addEventListener("click", async e=>{
+  const join = e.target.closest("[data-join-video]");
+  if(join){
+    // The room exists on the booking; short-lived provider tokens are minted by
+    // an Edge Function (not built yet), so this is still a placeholder.
     toast("Connecting to your video session… 🎥");
+    return;
   }
   const cancel = e.target.closest("[data-cancel]");
-  if(cancel){ cancelBooking(cancel.dataset.cancel); toast("Session cancelled"); render(); }
+  if(cancel){
+    const id = cancel.dataset.cancel;
+    if(Backend.enabled()){
+      cancel.disabled = true;
+      try{
+        await Backend.cancelBooking(id);
+        resetCounsellingCache();          // frees the slot server-side too
+        toast("Session cancelled");
+      }catch(err){ toast(err.message || "Could not cancel"); cancel.disabled = false; return; }
+    } else {
+      cancelBooking(id); toast("Session cancelled");
+    }
+    render();
+  }
 });
 
 /* ============================ Couple Space ============================ */
