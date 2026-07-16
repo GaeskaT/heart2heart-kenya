@@ -15,6 +15,34 @@ npm test
 
 Expected: **52 passed, 0 failed** across 4 migrations.
 
+## Live smoke test (against a real project)
+
+`npm test` needs no network. To additionally verify a **hosted** Supabase
+project (auth flows, the signup trigger, real RLS):
+
+```bash
+node live-smoke.mjs
+```
+
+Expected: **28 passed, 0 failed**.
+
+It resolves credentials in this order:
+
+1. `SUPABASE_URL` / `SUPABASE_ANON_KEY` env vars
+2. `local-project.json` (**gitignored**) —
+   `{ "url": "https://<ref>.supabase.co", "anonKey": "<anon or publishable key>" }`
+3. `../../supabase-config.js` — only if the app itself has been wired to a project
+
+The shipped `supabase-config.js` is deliberately **left blank** so the public
+demo stays on `localStorage` (instant, no signup, no real user data). Keep your
+project details in `local-project.json`.
+
+Only the **anon / publishable** key is ever needed. Never put the
+`service_role` key or database password in either file.
+
+Note: it creates two throwaway accounts per run (`*@h2h-test.local`), so the
+project accumulates test users. Clean them out via Authentication → Users.
+
 ## What it proves
 
 | Area | Asserted |

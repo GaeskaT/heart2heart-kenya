@@ -19,5 +19,5 @@
    ============================================================ */
 window.SUPABASE_CONFIG = {
   url: "",       // e.g. "https://abcdefgh.supabase.co"
-  anonKey: "",   // e.g. "eyJhbGciOi...."  (anon/public key only)
+  anonKey: "",   // e.g. "eyJhbGciOi...." or "sb_publishable_..."  (anon/public key only)
 };

@@ -7,6 +7,7 @@
     "test": "node run-tests.mjs"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.4"
+    "@electric-sql/pglite": "^0.5.4",
+    "@supabase/supabase-js": "^2.110.7"
   }
 }
