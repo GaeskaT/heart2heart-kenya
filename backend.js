@@ -232,9 +232,10 @@ const Backend = (() => {
   }
 
   /* ---- Phase 2: counselling ---- */
+  // Uses the counsellor_directory() RPC: names/avatars live on `profiles`, which
+  // members can't read, so a definer RPC returns just the safe display fields.
   async function listCounsellors(){
-    const { data, error } = await client.from("counsellors")
-      .select("id, title, specialties, bio, accepting_new").eq("active", true);
+    const { data, error } = await client.rpc("counsellor_directory");
     if (error) throw error;
     return data || [];
   }

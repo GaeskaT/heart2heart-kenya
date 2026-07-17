@@ -227,6 +227,16 @@ ok("counsellor CAN now read their client's profile",
 ok("counsellor still CANNOT read an unrelated member",
    (await rows(`select id from public.profiles where id=$1`, [U.memberC])).length === 0);
 
+/* counsellor directory: members must see names without any blanket profile read */
+await actAs(U.memberC);   // no relationship with the counsellor at all
+{
+  const dir = await rows(`select id, full_name, title from public.counsellor_directory()`);
+  ok("member sees the counsellor directory with real names",
+     dir.length === 1 && dir[0].full_name === "Dr Counsellor", JSON.stringify(dir));
+  ok("...without gaining any profile read on them",
+     (await rows(`select id from public.profiles where id=$1`, [U.counsellor])).length === 0);
+}
+
 /* ---------- 10. clinical notes ---------- */
 section("Clinical notes confidentiality");
 await actAs(U.counsellor);

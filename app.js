@@ -383,17 +383,13 @@ function ensureRemote(){
 /* ---- Phase 2: counselling (counsellors, bookings, confidential Q&A) ---- */
 async function loadCounselling(){
   const [counsellors, bookings, questions] = await Promise.all([
-    Backend.listCounsellors(),
+    Backend.listCounsellors(),     // counsellor_directory(): name + avatar included
     Backend.listBookings(),
     Backend.listQuestions(),
   ]);
-  // counsellors table carries title/specialties; the display name lives on profiles
-  const named = await Promise.all(counsellors.map(async c => {
-    const card = await Backend.memberCard(c.id).catch(() => null);
-    return { ...c, name: card ? (card.full_name || "Counsellor") : "Counsellor",
-             color: (card && card.avatar_color) || "#0f6f6a" };
+  remote.counsellors = counsellors.map(c => ({
+    ...c, name: c.full_name || "Counsellor", color: c.avatar_color || "#0f6f6a",
   }));
-  remote.counsellors = named;
   remote.bookings = bookings;
   remote.questions = questions;
 }
