@@ -151,27 +151,33 @@ const CHECKIN_QUESTIONS = [
 ];
 
 /* ---- Counsellor Support content ---- */
+// Shared professional credentials — every counsellor on the platform is a KIPC
+// graduate and registered with the Counsellors & Psychologists Board.
+const CN_CREDENTIALS = [
+  "Graduate, Kenya Institute of Professional Counselling (KIPC)",
+  "Registered — Counsellors & Psychologists Board",
+];
 const COUNSELLORS = [
   { id:"cn1", name:"Dr. Njeri Kamau", color:"#0f6f6a", title:"Clinical Psychologist",
-    focus:["Healing after divorce","Trauma","Self-worth"],
+    focus:["Healing after divorce","Trauma","Self-worth"], credentials:CN_CREDENTIALS,
     bio:"15 years walking with people through painful endings toward healthy new beginnings." },
   { id:"cn2", name:"Amina Hassan", color:"#e0a44b", title:"Marriage & Family Therapist",
-    focus:["Communication","Conflict","Couples"],
+    focus:["Communication","Conflict","Couples"], credentials:CN_CREDENTIALS,
     bio:"Helps individuals and couples turn conflict into closeness, with warmth and practicality." },
   { id:"cn3", name:"Grace Wanjiku", color:"#9b3d54", title:"Counselling Psychologist",
-    focus:["Grief","Widowhood","Loneliness"],
+    focus:["Grief","Widowhood","Loneliness"], credentials:CN_CREDENTIALS,
     bio:"A gentle guide for those rebuilding after loss and rediscovering their worth." },
   { id:"cn4", name:"Pastor Daniel Ochieng", color:"#6b4a72", title:"Faith-based Counsellor",
-    focus:["Marriage prep","Faith","Forgiveness"],
+    focus:["Marriage prep","Faith","Forgiveness"], credentials:CN_CREDENTIALS,
     bio:"Integrates faith and sound counselling for couples preparing for a lasting marriage." },
   { id:"cn5", name:"Victoria Njuguna", color:"#0f6f6a", title:"Clinical Psychologist",
-    focus:["Anxiety","Emotional wellness","Boundaries"],
+    focus:["Anxiety","Emotional wellness","Boundaries"], credentials:CN_CREDENTIALS,
     bio:"Calm, practical support for building emotional steadiness and healthy boundaries." },
   { id:"cn6", name:"Priscilla Maina", color:"#cc5b8a", title:"Marriage & Family Therapist",
-    focus:["Couples","Communication","Family expectations"],
+    focus:["Couples","Communication","Family expectations"], credentials:CN_CREDENTIALS,
     bio:"Helps couples navigate expectations and communicate with honesty and care." },
   { id:"cn7", name:"Brenda Omondi", color:"#3a6ea5", title:"Counselling Psychologist",
-    focus:["Single parents","Self-worth","New beginnings"],
+    focus:["Single parents","Self-worth","New beginnings"], credentials:CN_CREDENTIALS,
     bio:"Warm, encouraging guidance for single parents and anyone starting a new chapter." },
 ];
 

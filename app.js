@@ -421,7 +421,7 @@ function counsellorsList(){
   if(!Backend.enabled()) return COUNSELLORS;
   return (remote.counsellors || []).map(c => ({
     id:c.id, name:c.name, color:c.color, title:c.title || "Counsellor",
-    focus:c.specialties || [], bio:c.bio || "",
+    focus:c.specialties || [], bio:c.bio || "", credentials:c.credentials || [],
   }));
 }
 function counsellorNamed(id){ return counsellorsList().find(c => c.id === id) || null; }
@@ -2026,9 +2026,11 @@ route("book", ()=>{
     <div>
       <span class="fld-lbl">Counsellor</span>
       <div class="stack" style="margin-top:8px">
-        ${cns.map(c=>`<button class="pickrow ${bookDraft.counsellor===c.id?"on":""}" data-cn="${c.id}">
+        ${cns.map(c=>`<button class="pickrow ${bookDraft.counsellor===c.id?"on":""}" data-cn="${c.id}" style="align-items:flex-start">
           ${avatar(c.name,c.color,"sm")}
-          <div class="grow" style="text-align:left"><b>${esc(c.name)}</b><div class="sub">${esc(c.title)}</div></div></button>`).join("")}
+          <div class="grow" style="text-align:left"><b>${esc(c.name)}</b><div class="sub">${esc(c.title)}</div>
+            ${(c.credentials||[]).map(cr=>`<div class="tiny" style="color:var(--teal-700);margin-top:2px">✓ ${esc(cr)}</div>`).join("")}
+          </div></button>`).join("")}
       </div>
     </div>
 

@@ -50,8 +50,12 @@ for (const p of PEOPLE) {
 console.log(`\n${"─".repeat(60)}\nRun this in the Supabase SQL editor to activate them:\n${"─".repeat(60)}\n`);
 
 const promote = created.map(p => `update public.profiles set role = 'counsellor' where id = '${p.id}';`).join("\n");
-const insert = "insert into public.counsellors (id, title, specialties, bio, active, accepting_new) values\n" +
-  created.map(p => `  ('${p.id}', ${lit(p.title)}, ${arr(p.specialties)}, ${lit(p.bio)}, true, true)`).join(",\n") +
+const CREDS = [
+  "Graduate, Kenya Institute of Professional Counselling (KIPC)",
+  "Registered — Counsellors & Psychologists Board",
+];
+const insert = "insert into public.counsellors (id, title, specialties, bio, credentials, active, accepting_new) values\n" +
+  created.map(p => `  ('${p.id}', ${lit(p.title)}, ${arr(p.specialties)}, ${lit(p.bio)}, ${arr(CREDS)}, true, true)`).join(",\n") +
   "\non conflict (id) do nothing;";
 
 // One shared week of availability for all three (10:00 & 14:00, next 4 days).

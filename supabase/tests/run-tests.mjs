@@ -96,7 +96,8 @@ await db.exec(`
     age_min=25, age_max=40, onboarded=true where id='${U.memberC}';
   update public.profiles set full_name='Dr Counsellor', role='counsellor', onboarded=true where id='${U.counsellor}';
   update public.profiles set full_name='Admin',        role='admin',      onboarded=true where id='${U.admin}';
-  insert into public.counsellors (id, title, specialties) values ('${U.counsellor}','Clinical Psychologist', array['Trauma']);
+  insert into public.counsellors (id, title, specialties, credentials) values ('${U.counsellor}','Clinical Psychologist', array['Trauma'],
+    array['Graduate, Kenya Institute of Professional Counselling (KIPC)','Registered — Counsellors & Psychologists Board']);
 `);
 console.log("  ✓ 5 users (2 matched members, 1 unrelated member, counsellor, admin)");
 
@@ -230,9 +231,14 @@ ok("counsellor still CANNOT read an unrelated member",
 /* counsellor directory: members must see names without any blanket profile read */
 await actAs(U.memberC);   // no relationship with the counsellor at all
 {
-  const dir = await rows(`select id, full_name, title from public.counsellor_directory()`);
+  const dir = await rows(`select id, full_name, title, credentials from public.counsellor_directory()`);
   ok("member sees the counsellor directory with real names",
      dir.length === 1 && dir[0].full_name === "Dr Counsellor", JSON.stringify(dir));
+  ok("directory includes qualifications (KIPC + Board registration)",
+     dir[0] && Array.isArray(dir[0].credentials) && dir[0].credentials.length === 2
+       && dir[0].credentials.some(c => /KIPC/.test(c))
+       && dir[0].credentials.some(c => /Board/.test(c)),
+     JSON.stringify(dir[0] && dir[0].credentials));
   ok("...without gaining any profile read on them",
      (await rows(`select id from public.profiles where id=$1`, [U.counsellor])).length === 0);
 }
