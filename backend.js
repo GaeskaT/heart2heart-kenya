@@ -216,10 +216,65 @@ const Backend = (() => {
     if (error) throw error;
     return data || [];
   }
+  // Prefers the moderate-message Edge Function (real moderation model). Falls
+  // back to the send_message RPC (in-DB keyword screen) when the function isn't
+  // deployed, so the app works either way.
+  // Once the function IS deployed, harden by revoking send_message from
+  // authenticated — see supabase/migrations/0007.
+  let edgeSendAvailable = null;   // null = unknown, true/false once probed
   async function sendMessage(conversationId, body){
+    if (edgeSendAvailable !== false) {
+      try {
+        const { data, error } = await client.functions.invoke("moderate-message", {
+          body: { conversation_id: conversationId, body },
+        });
+        if (!error) { edgeSendAvailable = true; return data || null; }
+        // 404 => not deployed: remember and fall through. Anything else is a
+        // real failure (403 blocked/not-a-participant) and must surface.
+        const status = error.context && error.context.status;
+        if (status && status !== 404) {
+          let msg = error.message;
+          try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (_) {}
+          throw new Error(msg);
+        }
+        edgeSendAvailable = false;
+      } catch (e) {
+        if (edgeSendAvailable === true) throw e;   // it exists; this is a real error
+        edgeSendAvailable = false;                 // treat as not deployed
+      }
+    }
     const { data, error } = await client.rpc("send_message", { conversation_id: conversationId, body });
     if (error) throw error;
     return data || null; // jsonb: { id, moderation_status: 'approved' | 'flagged' }
+  }
+
+  /* ---- Payments (M-Pesa via Edge Function) ---- */
+  // The client never handles payment credentials: this only asks the server to
+  // send an STK prompt to the member's own handset. Entitlement is granted
+  // solely by the verified Daraja callback -> activate_subscription().
+  async function startMpesaPayment(paymentId, phone){
+    const { data, error } = await client.functions.invoke("mpesa-stk-push", {
+      body: { payment_id: paymentId, phone },
+    });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+    return data;   // { status:'prompt_sent', checkout_request_id, message }
+  }
+
+  /* ---- Video session token (Edge Function) ---- */
+  async function videoToken(bookingId){
+    const { data, error } = await client.functions.invoke("video-token", {
+      body: { booking_id: bookingId },
+    });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+    return data;   // { room, token, url }
   }
   // Subscribe to new messages in a conversation. Returns an unsubscribe fn.
   function subscribeMessages(conversationId, onInsert){
@@ -417,6 +472,8 @@ const Backend = (() => {
     listCounsellors, openSlots, bookSession, cancelBooking, listBookings,
     askQuestion, listQuestions, listNotifications, markNotificationRead,
     counsellorClients, answerQuestion,
+    // Edge Functions
+    startMpesaPayment, videoToken,
     // Phase 3
     listPlans, mySubscription, hasPremium, createPaymentIntent, cancelSubscription, listPayments,
     listWebinars, registerWebinar, cancelWebinar, myWebinars,

@@ -35,6 +35,15 @@ do $$ begin create role service_role   nologin bypassrls; exception when duplica
 grant usage on schema auth to anon, authenticated, service_role;
 grant select on auth.users to authenticated, service_role;
 
+-- Supabase grants service_role full access to everything in `public` via default
+-- privileges, which is why it can read/write any table. BYPASSRLS alone only
+-- skips POLICIES, not table GRANTs — without this the shim would wrongly deny
+-- service_role and mask what really happens in production.
+-- Set before the migrations run, so it applies to the objects they create.
+alter default privileges in schema public grant all on tables    to service_role;
+alter default privileges in schema public grant all on functions to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+
 -- Realtime publication that Supabase ships with
 do $$
 begin

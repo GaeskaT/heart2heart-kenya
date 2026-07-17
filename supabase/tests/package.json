@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Runs the Supabase migrations against an embedded Postgres (PGlite) and asserts the RLS policies.",
   "scripts": {
-    "test": "node run-tests.mjs"
+    "test": "node run-tests.mjs",
+    "test:functions": "node functions.test.mts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

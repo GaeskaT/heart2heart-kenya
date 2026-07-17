@@ -270,6 +270,45 @@ ok("payment marked succeeded",
 ok("member cannot see another member's payments",
    (await rows(`select id from public.payments`)).length === 1);
 
+/* ---------- 11b. Edge-Function RPCs must be service-role only ---------- */
+section("Edge-Function RPCs (service_role only)");
+await actAs(U.memberA);
+await denied("member CANNOT call send_message_moderated (would forge a verdict)",
+  () => db.query(`select public.send_message_moderated($1,$2,$3,'approved','{}','x',null)`,
+    [conv, U.memberA, "sneaky"]), "permission denied");
+await denied("member CANNOT call payment_by_ref",
+  () => db.query(`select * from public.payment_by_ref($1)`, ["ws_CO_1"]), "permission denied");
+await denied("member CANNOT call record_payment_event (would fake a webhook)",
+  () => db.query(`select public.record_payment_event('mpesa',$1,'{}')`, ["k"]), "permission denied");
+await denied("member CANNOT call attach_payment_ref",
+  () => db.query(`select public.attach_payment_ref($1,$2)`, [pay, "x"]), "permission denied");
+await denied("member CANNOT call booking_for_video for someone else",
+  () => db.query(`select * from public.booking_for_video($1,$2)`, [booking, U.memberB]), "permission denied");
+await actAs(null, "anon");
+await denied("anon CANNOT call send_message_moderated",
+  () => db.query(`select public.send_message_moderated($1,$2,$3,'approved','{}','x',null)`,
+    [conv, U.memberA, "x"]), "permission denied");
+
+// ...but the service role (i.e. the Edge Function) can, and the DB still
+// enforces participation rather than trusting the caller's claimed sender.
+await actAs(null, "service_role");
+{
+  const r = (await rows(`select public.send_message_moderated($1,$2,$3,'approved','{}','openai',null) as r`,
+    [conv, U.memberA, "sent via the moderation edge function"]))[0].r;
+  ok("service_role CAN send a moderated message", !!r.id, JSON.stringify(r));
+}
+await denied("service_role STILL cannot post as a non-participant",
+  () => db.query(`select public.send_message_moderated($1,$2,$3,'approved','{}','openai',null)`,
+    [conv, U.memberC, "let me in"]), "not a participant");
+{
+  const r = (await rows(`select public.send_message_moderated($1,$2,$3,'approved','{}','openai','self_harm') as r`,
+    [conv, U.memberA, "a message carrying distress"]))[0].r;
+  const flags = await rows(`select signal from public.safety_flags where source_id=$1`, [r.id]);
+  ok("crisis verdict raises a safety_flag but still delivers the message",
+     r.moderation_status === "approved" && flags.length === 1 && flags[0].signal === "self_harm",
+     JSON.stringify({ r, flags }));
+}
+
 /* ---------- 12. community ---------- */
 section("Community groups");
 await actAsSuper();
