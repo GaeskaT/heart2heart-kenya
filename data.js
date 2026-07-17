@@ -164,6 +164,15 @@ const COUNSELLORS = [
   { id:"cn4", name:"Pastor Daniel Ochieng", color:"#6b4a72", title:"Faith-based Counsellor",
     focus:["Marriage prep","Faith","Forgiveness"],
     bio:"Integrates faith and sound counselling for couples preparing for a lasting marriage." },
+  { id:"cn5", name:"Victoria Njuguna", color:"#0f6f6a", title:"Clinical Psychologist",
+    focus:["Anxiety","Emotional wellness","Boundaries"],
+    bio:"Calm, practical support for building emotional steadiness and healthy boundaries." },
+  { id:"cn6", name:"Priscilla Maina", color:"#cc5b8a", title:"Marriage & Family Therapist",
+    focus:["Couples","Communication","Family expectations"],
+    bio:"Helps couples navigate expectations and communicate with honesty and care." },
+  { id:"cn7", name:"Brenda Omondi", color:"#3a6ea5", title:"Counselling Psychologist",
+    focus:["Single parents","Self-worth","New beginnings"],
+    bio:"Warm, encouraging guidance for single parents and anyone starting a new chapter." },
 ];
 
 const SESSION_TYPES = [
