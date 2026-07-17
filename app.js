@@ -21,6 +21,7 @@ const DEFAULT_STATE = {
   community:{ joined:[], posts:{} },
   events:{ rsvp:[] },
   premium:{ plan:"free" },
+  progress:[],       // match/relationship progress reports for the counselling team
   seededInbound:false,
 };
 
@@ -232,7 +233,11 @@ function currentPlan(){ if(!S.premium) S.premium = {plan:"free"}; return S.premi
 function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save(); }
 
 /* ---------------- Compatibility matcher ---------------- */
-const INTENTION_RANK = { exploring:0, committed:1, marriage:2 };
+/* Commitment scale, mirrored in SQL match_score() (migration 0009).
+   'unsure' sits mid-scale so "not sure yet" reads as broadly compatible. */
+const INTENTION_RANK = { friends:0, casual:1, short:2, exploring:3, unsure:3, committed:4, marriage:5 };
+/* Faiths that shouldn't grant a "shared faith" bonus on their own. */
+const FAITH_SHY = new Set(["Prefer not to say","Other"]);
 
 /* The "why you match" lines. Shared by both modes: locally we pair them with a
    locally-computed score, in Supabase mode with the server's authoritative one
@@ -243,11 +248,10 @@ function matchReasons(u, c){
   const shared = (u.values||[]).filter(v => (c.values||[]).includes(v));
   if(shared.length) reasons.push({k:"Shared values", v: shared.slice(0,3).join(", ")});
 
-  const gap = Math.abs((INTENTION_RANK[u.intention]??1) - (INTENTION_RANK[c.intention]??1));
+  const gap = Math.abs((INTENTION_RANK[u.intention]??3) - (INTENTION_RANK[c.intention]??3));
   if(gap === 0) reasons.push({k:"Same intention", v: intentionLabel(c.intention)});
 
-  const shy = v => v === "Prefer not to say";
-  if(u.faith === c.faith && !shy(u.faith) && u.faith) reasons.push({k:"Shared faith", v:c.faith});
+  if(u.faith === c.faith && !FAITH_SHY.has(u.faith) && u.faith) reasons.push({k:"Shared faith", v:c.faith});
 
   if(familyAlign(u.familyGoal, c.familyGoal).pts >= 12) reasons.push({k:"Family goals align", v:c.familyGoal});
   if(u.county && u.county === c.county) reasons.push({k:"Near you", v:c.county});
@@ -264,15 +268,14 @@ function scoreMatch(u, c){
 
   // Relationship intention — up to 20
   max += 20;
-  const gap = Math.abs((INTENTION_RANK[u.intention]??1) - (INTENTION_RANK[c.intention]??1));
+  const gap = Math.abs((INTENTION_RANK[u.intention]??3) - (INTENTION_RANK[c.intention]??3));
   if(gap === 0){ pts += 20; }
   else if(gap === 1){ pts += 11; }
 
   // Faith — up to 15
   max += 15;
-  const shy = v => v === "Prefer not to say";
-  if(u.faith === c.faith && !shy(u.faith)){ pts += 15; }
-  else if(shy(u.faith) || shy(c.faith)){ pts += 8; }
+  if(u.faith === c.faith && !FAITH_SHY.has(u.faith)){ pts += 15; }
+  else if(FAITH_SHY.has(u.faith) || FAITH_SHY.has(c.faith)){ pts += 8; }
 
   // Family goals — up to 15
   max += 15;
@@ -744,7 +747,7 @@ route("signup", ()=>{
       <select class="input" id="familyGoal">${FAMILY_GOALS.map(f=>`<option ${u.familyGoal===f?"selected":""}>${f}</option>`).join("")}</select></label>
 
     <div>
-      <span style="display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 6px 2px">Your core values — pick 3 to 5</span>
+      <span style="display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 6px 2px">Your core values — pick 5</span>
       <div class="chips" id="values">
         ${VALUES.map(v=>`<button type="button" class="chip select ${(u.values||[]).includes(v)?"on":""}" data-v="${v}">${v}</button>`).join("")}
       </div>
@@ -777,7 +780,7 @@ route("signup", ()=>{
       const age  = +g("age").value;
       if(name.length<2){ toast("Please add your name"); return; }
       if(!(age>=18)){ toast("Please add a valid age (18+)"); return; }
-      if(values.length<3){ toast("Pick at least 3 values"); return; }
+      if(values.length!==5){ toast("Please pick 5 values"); return; }
       const u = {
         name, age, gender:g("gender").value, county:g("county").value,
         faith:g("faith").value, education:g("education").value, career:g("career").value.trim(),
@@ -1227,13 +1230,16 @@ function wireConnectCTA(root, id){
 
 function openSafetySheet(id){
   const c = cardFor(id) || { name:"this member" };
+  const connected = statusFor(id) === "connected";
   const box = sheet(`
-    <h3>Safety & privacy</h3>
+    <h3>Options</h3>
     <p class="muted tiny" style="margin:6px 0 14px">You're always in control of who you connect with.</p>
+    ${connected?`<button class="btn secondary" id="progress" style="margin-bottom:10px">📈 Report progress</button>`:""}
     <button class="btn secondary" id="report" style="margin-bottom:10px">🚩 Report ${esc(c.name)}</button>
     <button class="btn danger" id="block">🚫 Block ${esc(c.name)}</button>
     <button class="btn ghost" id="cancel" style="margin-top:6px">Cancel</button>`);
   $("#cancel",box.el).onclick = box.close;
+  const pr = $("#progress",box.el); if(pr) pr.onclick = ()=>{ box.close(); openProgress(id); };
   $("#report",box.el).onclick = ()=>{ box.close(); openReport(id); };
   $("#block",box.el).onclick = async ()=>{
     if(Backend.enabled()){
@@ -1265,6 +1271,35 @@ function openReport(id){
       }catch(e){ toast(e.message || "Could not submit report"); btn.disabled = false; return; }
     }
     box.close(); toast("Report submitted — thank you. Our team will review it.");
+  };
+}
+
+/* Report progress after meeting / a successful match — shared, privately, with
+   the counselling team so they can support the journey. */
+function openProgress(id){
+  const c = cardFor(id) || { name:"this connection" };
+  const stages = [
+    { v:"met",     t:"We've met in person" },
+    { v:"going",   t:"It's going well" },
+    { v:"slow",    t:"Taking it slowly" },
+    { v:"paused",  t:"We've paused things" },
+    { v:"ended",   t:"We've decided to end it" },
+    { v:"support", t:"I'd like counsellor support" },
+  ];
+  const box = sheet(`
+    <h3>How's it going with ${esc(c.name)}?</h3>
+    <p class="muted tiny" style="margin:6px 0 12px">Shared privately with your counselling team to help support your journey. Only you can see this with them.</p>
+    <div class="stack">${stages.map((s,i)=>`<label class="row"><input type="radio" name="pg" value="${i}"> <span class="tiny">${s.t}</span></label>`).join("")}</div>
+    <textarea class="input" id="pnote" placeholder="Anything you'd like to add (optional)" style="margin-top:12px;min-height:60px"></textarea>
+    <button class="btn" id="psend" style="margin-top:12px">Share update</button>`);
+  $("#psend",box.el).onclick = ()=>{
+    const picked = $('input[name=pg]:checked',box.el);
+    if(!picked){ toast("Please choose an update"); return; }
+    const s = stages[+picked.value];
+    (S.progress ||= []).push({ ts:Date.now(), with:id, stage:s.v, label:s.t, note:$("#pnote",box.el).value.trim() });
+    save();
+    box.close();
+    toast(s.v==="support" ? "Thank you — a counsellor will reach out." : "Update shared with your counselling team 💚");
   };
 }
 
@@ -1600,6 +1635,7 @@ route("profile", ()=>{
 
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
+    <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
     ${Backend.enabled()?`<div class="list-row" data-act="signout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Sign out</b><div class="sub">End your session on this device</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
@@ -1607,6 +1643,12 @@ route("profile", ()=>{
   mount(root){
     wireFeatureRows(root);
     $("[data-act=edit]",root).onclick = ()=> go("signup");
+    $("[data-act=dataprotection]",root).onclick = ()=>{
+      const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔒</span><h3 class="grow">${esc(DATA_PROTECTION.title)}</h3></div>
+        <div class="stack" style="margin:12px 0 4px">${DATA_PROTECTION.body.map(p=>`<p class="tiny muted">${esc(p)}</p>`).join("")}</div>
+        <button class="btn" id="ok" style="margin-top:12px">Got it</button>`);
+      $("#ok",box.el).onclick = box.close;
+    };
     const so = $("[data-act=signout]",root); if(so) so.onclick = async ()=>{
       try{ await Backend.signOut(); }catch(e){}
       rdIndex=0; reset(); toast("Signed out");

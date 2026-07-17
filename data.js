@@ -9,21 +9,31 @@ const COUNTIES = [
 ];
 
 const VALUES = [
-  "Faith","Family","Honesty","Growth","Kindness","Ambition","Community",
-  "Stability","Adventure","Health","Service","Financial discipline"
+  "Faith","Spirituality","Family","Honesty","Integrity","Growth","Kindness","Ambition",
+  "Community","Stability","Adventure","Health","Service","Financial discipline",
+  "Loyalty","Respect","Trust","Patience","Responsibility","Generosity","Forgiveness",
+  "Humility","Joy","Positivity","Love","Commitment","Autonomy","Justice & fairness",
+  "Hope","Do good & do no harm","Empathy","Confidentiality","Cultural competence"
 ];
 
-const FAITHS = ["Christian","Muslim","Hindu","Spiritual / not religious","Prefer not to say"];
+const FAITHS = ["Christian","Muslim","Hindu","Spiritual / not religious","Other"];
 
+/* Ordered least → most committed; "unsure" is treated as neutral (see the
+   matcher's INTENTION_RANK). ids marriage/committed/exploring kept for
+   backward compatibility with existing profiles. */
 const INTENTIONS = [
   { id:"marriage",  label:"Marriage-focused" },
   { id:"committed", label:"Committed long-term relationship" },
   { id:"exploring", label:"Open, taking it slowly" },
+  { id:"short",     label:"Short-term dating" },
+  { id:"friends",   label:"Friends first" },
+  { id:"casual",    label:"Casual dating" },
+  { id:"unsure",    label:"Not sure yet" },
 ];
 
 const FAMILY_GOALS = ["Want children","Open to children","Have children already","Prefer no children","Still deciding"];
 
-const EDUCATION = ["Secondary","Certificate / Diploma","Undergraduate","Postgraduate"];
+const EDUCATION = ["Basic education","Secondary","Certificate / Diploma","Undergraduate","Postgraduate"];
 
 /* ---- Relationship Readiness assessment ----
    6 dimensions, each with weighted Likert (1..5) statements.
@@ -68,7 +78,19 @@ const CODE_OF_CONDUCT = [
   "I will keep others' shared stories private and confidential.",
   "I am pursuing a healthy, intentional relationship — not casual harm.",
   "I will report concerns and support a safe community for all.",
+  "I consent to my data being processed to run this service, and I understand my rights under the Kenya Data Protection Act, 2019.",
 ];
+
+/* Data protection notice (Kenya Data Protection Act, 2019) */
+const DATA_PROTECTION = {
+  title: "How we protect your data",
+  body: [
+    "Your privacy matters — especially here. Heart2Heart processes your personal data only to run the service: verifying members, finding compatible matches, and supporting your counselling journey.",
+    "We handle sensitive information (your readiness, wellness and counselling records) with extra care: it is encrypted, access-controlled, and never sold or used to profile you for advertising.",
+    "You have rights under the Kenya Data Protection Act, 2019 — to access, correct, delete or export your data, and to withdraw consent. Contact our team to exercise them.",
+    "Counselling notes are confidential and kept per professional and legal guidance. You choose what you share with other members.",
+  ],
+};
 
 /* ---- Guided-dating content ---- */
 const WEEKLY_PROMPTS = [
@@ -232,6 +254,8 @@ const RESOURCES = [
     body:"If you are in immediate danger, call 999 or 112. For emotional crisis support in Kenya, Befrienders Kenya offers a confidential listening line. You deserve support, and reaching out is a sign of strength." },
   { title:"When to seek professional help", kind:"info", icon:"💛",
     body:"Consider booking a session if you feel persistently low, anxious or stuck; if past hurt keeps affecting your relationships; or simply if you'd value a steady, professional space to think. You don't need to be in crisis to deserve support." },
+  { title:"How we protect your data", kind:"info", icon:"🔒",
+    body:"Heart2Heart processes your data only to run the service, and handles sensitive information (readiness, wellness and counselling records) with extra care — encrypted, access-controlled, never sold. Under the Kenya Data Protection Act, 2019 you can access, correct, delete or export your data and withdraw consent anytime. Counselling notes stay confidential." },
 ];
 
 /* ---- Couple Space content ---- */
@@ -250,24 +274,33 @@ const COUPLE_CHECKIN = [
 
 /* ---- Marriage Preparation pathway ---- */
 const MARRIAGE_TOPICS = [
+  { id:"personal", icon:"💛", title:"Personal & emotional readiness",
+    desc:"Before joining two lives, know your own.",
+    points:["Are you self-aware — do you know your triggers, patterns and needs?","Have you healed from past relationships and losses?","Your personal life goals, and how a shared life fits them","Emotional regulation — staying steady under stress","What you each need to feel emotionally safe"] },
+  { id:"values", icon:"🧭", title:"Values, beliefs & spirituality",
+    desc:"Shared direction on what matters most.",
+    points:["Your core values, and where they meet or differ","Faith and spirituality — practice, and raising a family","How you make big decisions and define 'a good life'","Respecting beliefs you don't fully share"] },
   { id:"financial", icon:"💰", title:"Financial planning",
     desc:"Align on money before it becomes a strain.",
     points:["Share incomes, debts and family obligations openly","Agree on saving vs. spending and 'ours vs. mine'","Set one shared financial goal for your first year","Understand each other's money story, not just the numbers"] },
-  { id:"conflict", icon:"🕊️", title:"Conflict management",
-    desc:"Learn to disagree without disconnecting.",
-    points:["Agree how you'll pause when things heat up","Practise 'I feel… I need…' instead of blame","Repair quickly — own your part without a 'but'","Decide together what fighting fair looks like"] },
+  { id:"conflict", icon:"🕊️", title:"Communication & conflict",
+    desc:"Learn to talk, listen, and disagree without disconnecting.",
+    points:["Keep communicating — listen to understand, not to win","Agree how you'll pause when things heat up","Practise 'I feel… I need…' instead of blame","Repair quickly — own your part without a 'but'","Decide together what fighting fair looks like"] },
   { id:"family", icon:"👨‍👩‍👧", title:"Family expectations",
     desc:"Name the unspoken assumptions about family.",
     points:["Discuss roles at home and how you'll share them","Agree boundaries with extended family together","Talk about holidays, support and involvement","Present a united front on the big decisions"] },
   { id:"parenting", icon:"👶", title:"Parenting discussions",
     desc:"Get aligned on children before you need to.",
     points:["Whether and when you both want children","How you'll discipline and show affection","The role of faith and family in raising them","What you'll each carry forward — and leave behind"] },
+  { id:"health", icon:"🩺", title:"Health & wellbeing",
+    desc:"Care for each other's whole health.",
+    points:["Share physical health and relevant medical history openly","Talk about fertility hopes and any concerns, without shame","Health insurance — cover for each other and a future family (SHIF/NHIF or private)","Mental health — past or current struggles, phobias, and how you support each other","Agree how you'll look after each other's wellbeing"] },
   { id:"intimacy", icon:"❤️", title:"Intimacy & sexual health",
     desc:"An honest, respectful conversation about closeness.",
     points:["Talk openly about expectations and comfort","Understand consent and ongoing communication","Discuss sexual health and any medical check-ups","Agree that intimacy grows on trust and safety"] },
   { id:"legal", icon:"⚖️", title:"Legal aspects of marriage",
     desc:"Understand the practical and legal side.",
-    points:["Types of marriage recognised in Kenya and registration","Rights, responsibilities and property","Whether to discuss any pre-marital agreements","Documents you'll need and how to prepare them"] },
+    points:["Marriages recognised in Kenya under the Marriage Act 2014 — Christian, Civil, Customary, Hindu and Islamic — and how to register","If remarrying: proof that a previous marriage has ended — a decree absolute / divorce certificate, or a late spouse's death certificate","Prenuptial agreements, property rights and responsibilities","Wills and inheritance (Law of Succession)","For cross-border couples: citizenship, spouse visas / dependant's pass","Documents you'll need (IDs, birth certificates) and how to prepare them"] },
   { id:"wedding", icon:"💒", title:"Wedding planning checklist",
     desc:"Plan a celebration that reflects you both.",
     points:["Agree a budget you're both at peace with","Decide guest list, venue and date together","Divide tasks so the load is shared","Keep sight of the marriage, not just the wedding"] },
@@ -308,6 +341,8 @@ const EVENTS = [
     location:"Naivasha", price:"KES 12,000", blurb:"A weekend away to deepen connection, guided by our counselling team." },
   { id:"e5", icon:"🤝", type:"Community", title:"Community Service Day", inDays:12, time:"08:30",
     location:"Machakos", price:"Free", blurb:"Serve together and build friendships through shared purpose." },
+  { id:"e6", icon:"☕", type:"Meet-up day", title:"Members' Meet-up Day", inDays:7, time:"11:00",
+    location:"Nairobi", price:"KES 300", blurb:"A relaxed daytime gathering — games, coffee and easy conversation with other members." },
 ];
 
 /* ---- Premium plans (prototype — no real payment is taken) ---- */
