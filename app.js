@@ -747,7 +747,7 @@ route("signup", ()=>{
       <select class="input" id="familyGoal">${FAMILY_GOALS.map(f=>`<option ${u.familyGoal===f?"selected":""}>${f}</option>`).join("")}</select></label>
 
     <div>
-      <span style="display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 6px 2px">Your core values — pick 5</span>
+      <span style="display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:0 0 6px 2px">Your core values — pick up to 5</span>
       <div class="chips" id="values">
         ${VALUES.map(v=>`<button type="button" class="chip select ${(u.values||[]).includes(v)?"on":""}" data-v="${v}">${v}</button>`).join("")}
       </div>
@@ -780,7 +780,7 @@ route("signup", ()=>{
       const age  = +g("age").value;
       if(name.length<2){ toast("Please add your name"); return; }
       if(!(age>=18)){ toast("Please add a valid age (18+)"); return; }
-      if(values.length!==5){ toast("Please pick 5 values"); return; }
+      if(values.length<3){ toast("Pick at least 3 values"); return; }
       const u = {
         name, age, gender:g("gender").value, county:g("county").value,
         faith:g("faith").value, education:g("education").value, career:g("career").value.trim(),

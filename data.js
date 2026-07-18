@@ -16,7 +16,7 @@ const VALUES = [
   "Hope","Do good & do no harm","Empathy","Confidentiality","Cultural competence"
 ];
 
-const FAITHS = ["Christian","Muslim","Hindu","Spiritual / not religious","Other"];
+const FAITHS = ["Christian","Muslim","Hindu","Spiritual / not religious","Other","Prefer not to say"];
 
 /* Ordered least → most committed; "unsure" is treated as neutral (see the
    matcher's INTENTION_RANK). ids marriage/committed/exploring kept for
