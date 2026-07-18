@@ -264,6 +264,26 @@ const Backend = (() => {
     return data;   // { status:'prompt_sent', checkout_request_id, message }
   }
 
+  /* ---- Listening Centre ---- */
+  async function requestListening(phone, note, time){
+    const { data, error } = await client.rpc("request_listening", {
+      p_phone: phone, p_note: note || null, p_time: time || null,
+    });
+    if (error) throw error;
+    return data;   // request id
+  }
+  async function listListeningRequests(){
+    const { data, error } = await client.from("listening_requests")
+      .select("id, phone, note, preferred_time, status, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+  async function cancelListening(id){
+    const { error } = await client.rpc("cancel_listening", { p_id: id });
+    if (error) throw error;
+  }
+
   /* ---- Video session token (Edge Function) ---- */
   async function videoToken(bookingId){
     const { data, error } = await client.functions.invoke("video-token", {
@@ -474,6 +494,8 @@ const Backend = (() => {
     counsellorClients, answerQuestion,
     // Edge Functions
     startMpesaPayment, videoToken,
+    // Listening Centre
+    requestListening, listListeningRequests, cancelListening,
     // Phase 3
     listPlans, mySubscription, hasPremium, createPaymentIntent, cancelSubscription, listPayments,
     listWebinars, registerWebinar, cancelWebinar, myWebinars,

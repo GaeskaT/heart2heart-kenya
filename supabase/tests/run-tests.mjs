@@ -342,6 +342,41 @@ ok("first RSVP gets a place", (await rows(`select public.rsvp_event($1) as r`, [
 await actAs(U.memberB);
 ok("RSVP past capacity is waitlisted", (await rows(`select public.rsvp_event($1) as r`, [ev]))[0].r === "waitlist");
 
+/* ---------- Listening Centre ---------- */
+section("Listening Centre");
+await actAs(null, "anon");
+await denied("anon CANNOT request a listening call",
+  () => db.query(`select public.request_listening('0712345678', null, null)`), "permission denied");
+
+await actAs(U.memberA);
+const lid = (await rows(`select public.request_listening('0712000111','I just need to talk','evenings') as id`))[0].id;
+ok("member can request a listening call", !!lid);
+ok("member sees their own request",
+   (await rows(`select id, status from public.listening_requests`)).length === 1);
+ok("request starts 'open'",
+   (await rows(`select status from public.listening_requests where id=$1`, [lid]))[0].status === "open");
+
+await actAs(U.memberB);
+ok("another member CANNOT see someone's listening request",
+   (await rows(`select id from public.listening_requests`)).length === 0);
+
+// crisis note on a listening request raises a safety flag (still just "listening")
+await actAs(U.memberB);
+const lid2 = (await rows(`select public.request_listening('0722000222','honestly I want to die some days', null) as id`))[0].id;
+await actAsSuper();
+ok("crisis language in a listening note raises a safety_flag",
+   (await rows(`select signal from public.safety_flags where source='listening' and source_id=$1`, [lid2])).length === 1);
+
+await actAs(U.memberA);
+await db.query(`select public.cancel_listening($1)`, [lid]);
+ok("member can cancel their own request",
+   (await rows(`select status from public.listening_requests where id=$1`, [lid]))[0].status === "cancelled");
+
+// staff (a counsellor) can see the open queue to call people back
+await actAs(U.counsellor);
+ok("staff can see open listening requests (the callback queue)",
+   (await rows(`select id from public.listening_requests where status='open'`)).length >= 1);
+
 /* ---------- summary ---------- */
 console.log(`\n${"─".repeat(52)}`);
 console.log(`\x1b[1m${pass} passed, ${fail} failed\x1b[0m  (${migrations.length} migrations applied)`);

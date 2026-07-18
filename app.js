@@ -22,6 +22,7 @@ const DEFAULT_STATE = {
   events:{ rsvp:[] },
   premium:{ plan:"free" },
   progress:[],       // match/relationship progress reports for the counselling team
+  listening:[],      // Listening Centre callback requests
   seededInbound:false,
 };
 
@@ -333,10 +334,12 @@ function seedInbound(){
    when it lands. Local mode never touches any of this.
    ============================================================ */
 const remote = { matches:null, rel:null, cards:{}, msgs:{}, loading:false, err:null,
-                 counsellors:null, bookings:null, questions:null, slots:{}, cLoading:false, cErr:null };
+                 counsellors:null, bookings:null, questions:null, slots:{}, cLoading:false, cErr:null,
+                 listening:null, lLoading:false };
 function resetRemote(){
   remote.matches=null; remote.rel=null; remote.cards={}; remote.msgs={}; remote.err=null;
   resetCounsellingCache();
+  remote.listening=null;
 }
 function resetCounsellingCache(){
   remote.counsellors=null; remote.bookings=null; remote.questions=null; remote.slots={}; remote.cErr=null;
@@ -445,6 +448,26 @@ function questionsList(){
   return (remote.questions || []).map(q => ({
     id:q.id, text:q.body, ts:new Date(q.created_at).getTime(),
     reply:(q.question_replies && q.question_replies[0]) ? q.question_replies[0].body : null,
+  }));
+}
+
+/* ---- Listening Centre (a listening ear, not counselling) ---- */
+function ensureListening(){
+  if(!Backend.enabled()) return true;
+  if(remote.listening !== null) return true;
+  if(remote.lLoading) return false;
+  remote.lLoading = true;
+  Backend.listListeningRequests()
+    .then(rows => { remote.listening = rows; })
+    .catch(e => { remote.listening = []; console.warn("[listening]", e); })
+    .finally(() => { remote.lLoading = false; render(); });
+  return false;
+}
+function listeningList(){
+  if(!Backend.enabled()) return (S.listening || []);
+  return (remote.listening || []).map(r => ({
+    id:r.id, phone:r.phone, note:r.note, time:r.preferred_time, status:r.status,
+    ts:new Date(r.created_at).getTime(),
   }));
 }
 
@@ -1707,6 +1730,13 @@ route("wellness", ()=>{
       <button class="tool-card" id="prayercard"><div class="tico">${prompt.type==="Prayer"?"✨":"🧘"}</div><b>${prompt.type} prompt</b><div class="sub">Tap for a new one</div></button>
     </div>
 
+    <div class="sec-h"><h3>Just need to be heard?</h3></div>
+    <button class="list-row" data-go2="listening" style="width:100%;text-align:left">
+      <div class="lico">👂</div>
+      <div class="grow"><b>Listening Centre</b><div class="sub">A trained listener calls you back to simply listen — not counselling</div></div>
+      <div class="chev">›</div>
+    </button>
+
     <div class="sec-h"><h3>Today's affirmation</h3></div>
     <div class="affirm">
       <div class="txt" id="afftext">"${esc(aff)}"</div>
@@ -1962,6 +1992,12 @@ route("counselling", ()=>{
       <button class="tool-card" data-go2="webinars"><div class="tico">🎓</div><b>Webinars</b><div class="sub">${wCount?wCount+" registered":WEBINARS.length+" upcoming"}</div></button>
       <button class="tool-card" data-go2="groups"><div class="tico">👥</div><b>Support groups</b><div class="sub">${gCount?gCount+" joined":SUPPORT_GROUPS.length+" groups"}</div></button>
     </div>
+
+    <button class="list-row" data-go2="listening" style="width:100%;text-align:left;margin-top:12px">
+      <div class="lico">👂</div>
+      <div class="grow"><b>Listening Centre</b><div class="sub">Just want to be heard? A listener calls back — not counselling</div></div>
+      <div class="chev">›</div>
+    </button>
 
     <div class="sec-h"><h3>Upcoming webinars</h3><a href="#/webinars">See all</a></div>
     ${WEBINARS.slice(0,2).map(w=>{
@@ -2220,6 +2256,83 @@ route("ask", ()=>{
         }
       }, 3000);
     };
+  }};
+});
+
+/* ---- Listening Centre ---- */
+const LISTEN_STATUS = { open:["gold","Waiting for a listener"], in_progress:["teal","A listener is reaching out"],
+  completed:["","Completed"], cancelled:["","Cancelled"] };
+route("listening", ()=>{
+  if(!ensureListening()) return loadingScreen("Listening Centre");
+  const list = listeningList().filter(r => r.status !== "cancelled");
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Listening Centre</h2></div>
+  <div class="pad">
+    <div class="card" style="background:linear-gradient(135deg,#12857f,#0a4b47);color:#fff">
+      <div style="font-size:30px">👂</div>
+      <b style="display:block;margin-top:6px;font-size:16px">Sometimes you just need to be heard</b>
+      <p class="tiny" style="opacity:.92;margin-top:6px">Request a call and a trained listener will simply listen — no advice, no counselling, no judgement. Just space to say it out loud.</p>
+    </div>
+
+    <div class="callout teal" style="margin-top:12px">💚 This is a listening ear, not counselling. If you'd like professional guidance instead, <a href="#/counselling">Counsellor Support</a> is there for you.</div>
+
+    <div class="card" style="margin-top:12px">
+      <label class="field"><span>Phone number to call you back</span>
+        <input class="input" id="lphone" type="tel" inputmode="tel" placeholder="e.g. 0712 345 678"></label>
+      <label class="field" style="margin-top:10px"><span>Best time to call (optional)</span>
+        <input class="input" id="ltime" placeholder="e.g. weekday evenings"></label>
+      <label class="field" style="margin-top:10px"><span>Anything you'd like your listener to know (optional)</span>
+        <textarea class="input" id="lnote" placeholder="You don't have to explain — share only what you want to." style="min-height:64px"></textarea></label>
+      <button class="btn" id="lsend" style="margin-top:12px">Request a listening call</button>
+      <p class="tiny faint center" style="margin-top:8px">🔒 Private. Your number is shared only with the listener who calls you.</p>
+    </div>
+
+    <div class="sec-h"><h3>${list.length?"Your requests":"How it works"}</h3></div>
+    ${list.length ? list.map(r=>{
+      const st = LISTEN_STATUS[r.status] || ["","—"];
+      return `<div class="card" style="margin-bottom:10px">
+        <div class="row between"><b>📞 ${esc(r.phone||"Callback")}</b><span class="chip ${st[0]}">${st[1]}</span></div>
+        ${r.time?`<div class="tiny faint" style="margin-top:4px">Preferred: ${esc(r.time)}</div>`:""}
+        ${r.note?`<p class="tiny muted" style="margin-top:6px">"${esc(r.note)}"</p>`:""}
+        <div class="tiny faint" style="margin-top:6px">${relTime(r.ts)}</div>
+        ${r.status==="open"?`<button class="btn sm secondary" data-cancel-listen="${r.id}" style="margin-top:10px">Cancel request</button>`:""}
+      </div>`;
+    }).join("")
+    : `<div class="card"><p class="tiny muted">Leave your number and, if you like, a note. A listener will call you back to simply listen — for as long as you need. It's free, confidential, and there's nothing you need to "fix" or explain.</p></div>`}
+    <div style="height:8px"></div>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("wellness");
+    $("#lsend",root).onclick = async ()=>{
+      const phone = $("#lphone",root).value.trim();
+      const time = $("#ltime",root).value.trim();
+      const note = $("#lnote",root).value.trim();
+      if(phone.length < 7){ toast("Please add a phone number we can call you on"); return; }
+      const btn = $("#lsend",root); btn.disabled = true; btn.textContent = "Sending…";
+      if(Backend.enabled()){
+        try{
+          await Backend.requestListening(phone, note, time);
+          remote.listening = null;               // refetch
+          toast("Request sent — a listener will call you 💚");
+          render();
+        }catch(e){ toast(e.message || "Could not send"); btn.disabled=false; btn.textContent="Request a listening call"; }
+        return;
+      }
+      (S.listening ||= []).unshift({ id:"l"+Date.now(), phone, note, time, status:"open", ts:Date.now() });
+      save();
+      toast("Request sent — a listener will call you 💚");
+      render();
+    };
+    $$("[data-cancel-listen]",root).forEach(b=> b.onclick = async ()=>{
+      const id = b.dataset.cancelListen;
+      if(Backend.enabled()){
+        try{ await Backend.cancelListening(id); remote.listening=null; }catch(e){ toast(e.message||"Could not cancel"); return; }
+      } else {
+        const r = (S.listening||[]).find(x=>x.id===id); if(r){ r.status="cancelled"; save(); }
+      }
+      toast("Request cancelled"); render();
+    });
   }};
 });
 
