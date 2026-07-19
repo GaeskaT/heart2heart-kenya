@@ -29,6 +29,22 @@ const DEFAULT_STATE = {
 let S = load();
 let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
 
+/* ---- PWA install ---- */
+let installPrompt = null;   // the deferred beforeinstallprompt event, if offered
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if(typeof render === "function") render();   // surface the Install button
+});
+window.addEventListener("appinstalled", () => { installPrompt = null; toast("App installed 💚"); });
+async function doInstall(){
+  if(!installPrompt) return;
+  installPrompt.prompt();
+  try{ await installPrompt.userChoice; }catch(e){}
+  installPrompt = null;
+  render();
+}
+
 function load(){
   try{
     const raw = localStorage.getItem(KEY);
@@ -654,11 +670,13 @@ route("welcome", ()=>({
       <p class="center tiny" style="opacity:.85">Membership is by counsellor approval. Already a member? Continue below.</p>
       <button class="btn" data-act="begin">Get started</button>
       ${Backend.enabled()?`<button class="btn ghost" data-act="login" style="color:#fff">Log in</button>`:""}
+      ${installPrompt?`<button class="btn ghost" data-act="install" style="color:#fff">📲 Install app</button>`:""}
     </div>
   </div>`,
   mount(root){
     $$("[data-act=begin]", root).forEach(b=> b.onclick = ()=> go("invite"));
     const li = $("[data-act=login]", root); if(li) li.onclick = ()=> go("login");
+    const ins = $("[data-act=install]", root); if(ins) ins.onclick = doInstall;
   }
 }));
 
@@ -1659,6 +1677,7 @@ route("profile", ()=>{
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
+    ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add Heart2Heart to your home screen</div></div><div class="chev">›</div></div>`:""}
     ${Backend.enabled()?`<div class="list-row" data-act="signout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Sign out</b><div class="sub">End your session on this device</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
@@ -1666,6 +1685,7 @@ route("profile", ()=>{
   mount(root){
     wireFeatureRows(root);
     $("[data-act=edit]",root).onclick = ()=> go("signup");
+    const insRow = $("[data-act=install]",root); if(insRow) insRow.onclick = doInstall;
     $("[data-act=dataprotection]",root).onclick = ()=>{
       const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔒</span><h3 class="grow">${esc(DATA_PROTECTION.title)}</h3></div>
         <div class="stack" style="margin:12px 0 4px">${DATA_PROTECTION.body.map(p=>`<p class="tiny muted">${esc(p)}</p>`).join("")}</div>

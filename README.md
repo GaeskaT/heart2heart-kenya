@@ -18,6 +18,12 @@ Works on any phone or desktop browser — no sign-in needed. Best experienced at
 phone width. Auto-updates on every push to `main`. Reset anytime from
 **You → Reset demo**.
 
+**Installable (PWA):** open the link on your phone and use *Add to Home Screen*
+(or the in-app **Install app** button on Chrome/Android) to run it full-screen
+like a native app. It works offline once loaded, via a service worker
+(`sw.js`) + web manifest. Icons are generated dependency-free by
+`tools/build-icons.mjs`.
+
 ## Run it locally
 
 Any static file server works. For example:

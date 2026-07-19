@@ -8,6 +8,14 @@
   <meta name="description" content="A counsellor-guided relationship app for healthy dating and marriage. Healing first. Healthy relationships next." />
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%92%9A%3C/text%3E%3C/svg%3E" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Heart2Heart" />
+  <meta name="mobile-web-app-capable" content="yes" />
 </head>
 <body>
   <!-- Phone frame is purely cosmetic on wide screens; the app fills the screen on mobile -->
@@ -41,5 +49,15 @@
   <script src="supabase-config.js"></script>
   <script src="backend.js"></script>
   <script src="app.js"></script>
+
+  <!-- Register the service worker (installability + offline). Path is relative,
+       so it works under the GitHub Pages subpath. -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch((e) => console.warn("[pwa] SW registration failed", e));
+      });
+    }
+  </script>
 </body>
 </html>
