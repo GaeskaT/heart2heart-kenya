@@ -81,6 +81,21 @@ const CODE_OF_CONDUCT = [
   "I consent to my data being processed to run this service, and I understand my rights under the Kenya Data Protection Act, 2019.",
 ];
 
+/* ---- Crisis resources (member-facing) ----
+   ⚠️  VERIFY every number with the counselling team before launch, and add the
+   service's own crisis / on-call line. See docs/crisis-safety-protocol.md.
+   Heart2Heart is NOT an emergency service — that boundary must stay explicit. */
+const CRISIS_RESOURCES = {
+  boundary: "Heart2Heart is not an emergency service. If you or someone else is in immediate danger, please contact emergency services now.",
+  lines: [
+    { label:"Emergency — police / ambulance", value:"999 or 112", tel:"999", urgent:true },
+    { label:"Kenya Red Cross support line", value:"1199", tel:"1199" },
+    { label:"Befrienders Kenya — confidential emotional support", value:"befrienderskenya.org", tel:null },
+    // The counselling team adds their own crisis / on-call contact here.
+  ],
+  note: "You matter, and reaching out is a sign of strength. If you can, please also tell someone you trust. A listener or counsellor here is ready for you too.",
+};
+
 /* Data protection notice (Kenya Data Protection Act, 2019) */
 const DATA_PROTECTION = {
   title: "How we protect your data",

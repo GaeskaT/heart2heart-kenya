@@ -264,6 +264,31 @@ const Backend = (() => {
     return data;   // { status:'prompt_sent', checkout_request_id, message }
   }
 
+  /* ---- Crisis / safety response (staff only; RLS + in-function guards) ---- */
+  async function safetyQueue(includeClosed = false){
+    const { data, error } = await client.rpc("safety_queue", { include_closed: includeClosed });
+    if (error) throw error;
+    return data || [];
+  }
+  async function claimSafetyFlag(id){
+    const { error } = await client.rpc("claim_safety_flag", { p_id: id });
+    if (error) throw error;
+  }
+  async function recordSafetyAction(id, outcome, notes, resolved = false, escalated = false){
+    const { error } = await client.rpc("record_safety_action", {
+      p_id: id, p_outcome: outcome, p_notes: notes || null, p_resolved: resolved, p_escalated: escalated,
+    });
+    if (error) throw error;
+  }
+  // A dashboard subscribes for instant alerts; RLS ensures only staff receive these.
+  function subscribeSafetyFlags(onInsert){
+    const ch = client.channel("safety_flags")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "safety_flags" },
+        (payload) => onInsert(payload.new))
+      .subscribe();
+    return () => client.removeChannel(ch);
+  }
+
   /* ---- Listening Centre ---- */
   async function requestListening(phone, note, time){
     const { data, error } = await client.rpc("request_listening", {
@@ -496,6 +521,8 @@ const Backend = (() => {
     startMpesaPayment, videoToken,
     // Listening Centre
     requestListening, listListeningRequests, cancelListening,
+    // Crisis / safety response (staff)
+    safetyQueue, claimSafetyFlag, recordSafetyAction, subscribeSafetyFlags,
     // Phase 3
     listPlans, mySubscription, hasPremium, createPaymentIntent, cancelSubscription, listPayments,
     listWebinars, registerWebinar, cancelWebinar, myWebinars,

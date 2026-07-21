@@ -1315,6 +1315,31 @@ function openReport(id){
   };
 }
 
+/* Client-side crisis screen — mirrors the SQL crisis_signal() so the SENDER
+   gets immediate support even when the server-side flag/response is async or
+   the moderation Edge Function isn't deployed. */
+function looksLikeCrisis(t){ return /\b(kill myself|end it all|suicide|want to die|self.?harm)\b/i.test(t || ""); }
+
+/* Immediate crisis support. Surfaced whenever distress is detected and reachable
+   any time from the Wellness hub. This is the fast in-app response; the human
+   response runs in parallel via the safety queue (see the crisis protocol). */
+function openCrisisHelp(){
+  const R = CRISIS_RESOURCES;
+  const box = sheet(`
+    <div class="row" style="gap:10px"><span style="font-size:24px">💚</span><h3 class="grow">You're not alone</h3></div>
+    <div class="callout coral" style="text-align:left;margin:10px 0">⚠️ ${esc(R.boundary)}</div>
+    <div class="stack">
+      ${R.lines.map(l=>`<div class="list-row" style="cursor:${l.tel?'pointer':'default'}" ${l.tel?`data-tel="${esc(l.tel)}"`:""}>
+        <div class="lico" style="background:${l.urgent?'var(--coral-50)':'var(--teal-50)'};color:${l.urgent?'var(--danger)':'var(--teal-700)'}">${l.tel?'📞':'🔗'}</div>
+        <div class="grow"><b>${esc(l.label)}</b><div class="sub">${esc(l.value)}</div></div>
+        ${l.tel?`<div class="chev">›</div>`:""}</div>`).join("")}
+    </div>
+    <p class="tiny muted" style="margin-top:12px">${esc(R.note)}</p>
+    <button class="btn ghost" id="close" style="margin-top:10px">Close</button>`);
+  $("#close",box.el).onclick = box.close;
+  $$("[data-tel]",box.el).forEach(el => el.onclick = ()=>{ location.href = "tel:" + el.dataset.tel; });
+}
+
 /* Report progress after meeting / a successful match — shared, privately, with
    the counselling team so they can support the journey. */
 function openProgress(id){
@@ -1456,6 +1481,8 @@ route("chat", (id)=>{
           if(res && res.moderation_status === "flagged"){
             toast("⚠️ That message was flagged by moderation and is under review.");
           }
+          // distress in the message -> immediate support for the sender
+          if((res && res.crisis) || looksLikeCrisis(text)) openCrisisHelp();
         }catch(e){
           input.value = text;   // don't lose what they typed
           toast(/blocked/i.test(e.message||"") ? "You can't message this person." : (e.message || "Message not sent"));
@@ -1479,6 +1506,7 @@ route("chat", (id)=>{
       input.value=""; save();
       scroll.insertAdjacentHTML("beforeend", bubbleHTML(cn.messages[cn.messages.length-1]));
       toBottom();
+      if(looksLikeCrisis(text)) openCrisisHelp();
       setTimeout(()=>{
         const reply = REPLIES[cn.messages.length % REPLIES.length];
         cn.messages.push({from:"them", text:reply, ts:Date.now()}); save();
@@ -1722,7 +1750,11 @@ route("wellness", ()=>{
   <div class="pad">
     <p class="muted tiny">Small daily practices for a steady, healthy heart. Everything here is private to you.</p>
 
-    <div class="card" style="margin-top:14px">
+    <button class="callout coral" id="crisis-help" style="width:100%;text-align:left;margin-top:12px;border:none;cursor:pointer">
+      <span>🆘</span><span><b>Struggling right now?</b> Tap for immediate support and helplines.</span>
+    </button>
+
+    <div class="card" style="margin-top:12px">
       <div class="row between"><b>How is your heart today?</b>${streak>0?`<span class="chip">🔥 ${streak}-day streak</span>`:""}</div>
       <div class="mood-row" id="moodrow">
         ${MOODS.map(mo=>`<button class="mood-btn ${m&&m.score===mo.score?"on":""}" data-score="${mo.score}">
@@ -1782,6 +1814,7 @@ route("wellness", ()=>{
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
     $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
+    $("#crisis-help",root).onclick = openCrisisHelp;
 
     // mood logging
     $$("#moodrow .mood-btn",root).forEach(b=> b.onclick = ()=>{
@@ -1953,16 +1986,19 @@ function openCheckinResult(avg){
             : avg>=3 ? ["You're doing okay 🌤️","Some things feel steady, some heavier. Be gentle with yourself today."]
                      : ["A tender season 💛","Thank you for checking in honestly. Consider reaching out — a counsellor or a friend."];
   const showBook = avg < 3;
+  const veryLow = avg < 2;   // a strong signal — offer immediate support
   const box = sheet(`
     <div class="center">
       <div style="font-size:40px">${avg>=4?"🌟":avg>=3?"🌤️":"💛"}</div>
       <h3 style="margin-top:6px">${msg[0]}</h3>
       <p class="muted" style="margin:8px 0 16px">${msg[1]}</p>
     </div>
-    ${showBook?`<button class="btn" id="book">Talk to a counsellor</button>`:""}
-    <button class="btn ${showBook?"ghost":""}" id="done" ${showBook?'style="margin-top:6px"':''}>Done</button>`);
+    ${veryLow?`<button class="btn coral" id="help">🆘 Get support now</button>`:""}
+    ${showBook?`<button class="btn ${veryLow?"secondary":""}" id="book" ${veryLow?'style="margin-top:8px"':''}>Talk to a counsellor</button>`:""}
+    <button class="btn ${(showBook||veryLow)?"ghost":""}" id="done" ${(showBook||veryLow)?'style="margin-top:6px"':''}>Done</button>`);
   $("#done",box.el).onclick = ()=>{ box.close(); go("wellness"); };
   const bk = $("#book",box.el); if(bk) bk.onclick = ()=>{ box.close(); toast("Opening Counsellor Support…"); go("counselling"); };
+  const hp = $("#help",box.el); if(hp) hp.onclick = ()=>{ box.close(); openCrisisHelp(); };
 }
 
 /* relative time helper */
@@ -2256,6 +2292,7 @@ route("ask", ()=>{
           remote.questions = null;              // refetch so it appears
           toast("Sent confidentially 💚");
           render();
+          if(looksLikeCrisis(t)) openCrisisHelp();
         }catch(e){
           toast(e.message || "Could not send"); btn.disabled = false; btn.textContent = "Send confidentially";
         }
@@ -2265,6 +2302,7 @@ route("ask", ()=>{
       const q = addQuestion(t);
       toast("Sent confidentially 💚");
       render();
+      if(looksLikeCrisis(t)) openCrisisHelp();
       // simulated acknowledgement from the counselling team
       setTimeout(()=>{
         const item = couns().questions.find(x=>x.id===q.id);
@@ -2296,6 +2334,7 @@ route("listening", ()=>{
     </div>
 
     <div class="callout teal" style="margin-top:12px">💚 This is a listening ear, not counselling. If you'd like professional guidance instead, <a href="#/counselling">Counsellor Support</a> is there for you.</div>
+    <button class="callout coral" data-crisis style="width:100%;text-align:left;margin-top:8px;border:none;cursor:pointer"><span>🆘</span><span>In crisis or unsafe right now? <b>Get help now →</b></span></button>
 
     <div class="card" style="margin-top:12px">
       <label class="field"><span>Phone number to call you back</span>
@@ -2324,11 +2363,13 @@ route("listening", ()=>{
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("wellness");
+    const cr = $("[data-crisis]",root); if(cr) cr.onclick = openCrisisHelp;
     $("#lsend",root).onclick = async ()=>{
       const phone = $("#lphone",root).value.trim();
       const time = $("#ltime",root).value.trim();
       const note = $("#lnote",root).value.trim();
       if(phone.length < 7){ toast("Please add a phone number we can call you on"); return; }
+      if(looksLikeCrisis(note)) openCrisisHelp();
       const btn = $("#lsend",root); btn.disabled = true; btn.textContent = "Sending…";
       if(Backend.enabled()){
         try{

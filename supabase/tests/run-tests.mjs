@@ -377,6 +377,42 @@ await actAs(U.counsellor);
 ok("staff can see open listening requests (the callback queue)",
    (await rows(`select id from public.listening_requests where status='open'`)).length >= 1);
 
+/* ---------- Crisis response ---------- */
+section("Crisis response (0011)");
+// A crisis message from A already raised a flag earlier; make a fresh one and drive it.
+await actAs(U.memberA);
+await db.query(`select public.send_message($1,$2)`, [conv, "some days I want to die"]);
+await actAsSuper();
+const flag = (await rows(`select id, severity, status from public.safety_flags where signal='self_harm' order by created_at desc limit 1`))[0];
+ok("crisis flag severity is stamped 'critical'", flag.severity === "critical", flag.severity);
+
+await actAs(U.memberA);
+ok("member's safety_queue() returns nothing (staff-guarded inside)",
+   (await rows(`select * from public.safety_queue(false)`)).length === 0);
+await denied("member CANNOT resolve a safety flag",
+  () => db.query(`select public.record_safety_action($1,'x',null,true,false)`, [flag.id]), "not_allowed");
+ok("member cannot even read safety_flags directly",
+   (await rows(`select id from public.safety_flags`)).length === 0);
+
+await actAs(U.counsellor);
+const queue = await rows(`select id, severity, member_name from public.safety_queue(false)`);
+ok("staff can read the triage queue", queue.length >= 1, `got ${queue.length}`);
+ok("queue is severity-ordered (critical first)", queue[0].severity === "critical", queue[0].severity);
+
+await db.query(`select public.claim_safety_flag($1)`, [flag.id]);
+await actAsSuper();
+const claimed = (await rows(`select assigned_to is not null as a, acknowledged_at is not null as k from public.safety_flags where id=$1`, [flag.id]))[0];
+ok("claim assigns the flag and acknowledges it", claimed.a === true && claimed.k === true, JSON.stringify(claimed));
+
+await actAs(U.counsellor);
+await db.query(`select public.record_safety_action($1,$2,$3,true,true)`, [flag.id, "Contacted member; safe for now", "Followed up by phone"]);
+await actAsSuper();
+const done = (await rows(`select status, escalated, outcome, resolved_at from public.safety_flags where id=$1`, [flag.id]))[0];
+ok("resolving closes the flag, records outcome + escalation",
+   done.status === "closed" && done.escalated === true && !!done.outcome && !!done.resolved_at, JSON.stringify(done));
+ok("the response is audited",
+   (await rows(`select id from public.audit_log where action='safety.resolved' and entity_id=$1`, [flag.id])).length === 1);
+
 /* ---------- summary ---------- */
 console.log(`\n${"─".repeat(52)}`);
 console.log(`\x1b[1m${pass} passed, ${fail} failed\x1b[0m  (${migrations.length} migrations applied)`);
