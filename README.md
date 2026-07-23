@@ -3,8 +3,9 @@
 > *Healing first. Healthy relationships next.*
 
 A counsellor-guided relationship app for healthy dating and marriage. Unlike a
-conventional dating app, Heart2Heart is for adults who have completed counselling
-and are emotionally ready to build intentional, respectful relationships.
+conventional dating app, Heart2Heart is for adults who are emotionally ready to
+build intentional, respectful relationships. Counselling is offered and encouraged
+throughout the journey, but is **not** a requirement to join or to be matched.
 
 This repo is a **front-end prototype** — a fully working, offline, single-page web
 app (no backend, no build step). All state is saved in the browser's
@@ -48,8 +49,10 @@ The app runs fully offline on `localStorage` by default. To switch onboarding to
 3. Paste your project **URL** and **anon/public** key into
    [`supabase-config.js`](supabase-config.js).
 
-That's it — the app auto-detects the config and wires sign-up / log-in, invite
-redemption, the profile, the readiness assessment and consent to Supabase.
+That's it — the app auto-detects the config and wires sign-up / log-in, the
+profile, the readiness assessment and consent to Supabase. (Registration is open,
+so no invite code is required.) The membership subscription is a simulated,
+client-side gate and is not persisted server-side in this prototype.
 With the config blank it stays in local-only mode (nothing external is loaded).
 The `anon` key is safe to commit; **never** put the `service_role` key here.
 
@@ -57,7 +60,10 @@ The `anon` key is safe to commit; **never** put the `service_role` key here.
 
 The four stages of the member journey are implemented end to end:
 
-1. **Invitation & eligibility** — counsellor invite code + eligibility confirmation.
+1. **Open registration** — no invitation code and no counselling attendance
+   required. Anyone confirms a short eligibility check (18+, emotionally ready,
+   seeking a healthy relationship) and can register to explore. Browsing is free;
+   **using** any feature requires an active membership (see below).
 2. **Stage 1 · Healthy Self** — a 6-dimension **Relationship Readiness** assessment
    (emotional wellness, communication, conflict resolution, values, life goals,
    expectations) that computes a private **Relationship Wellness Score**, plus a
@@ -70,6 +76,27 @@ The four stages of the member journey are implemented end to end:
    and **mutual-consent messaging**: no anonymous chat — a conversation only opens
    after *both* people express interest. Includes report/block and a lightweight
    AI-moderation guard on abusive language.
+
+### Membership (access model)
+
+Registration is **open and free** — anyone can create a profile and *browse* the
+whole app (Home and Profile show every feature). *Using* a feature — Matches,
+Messages, the Learning Academy, Wellness Tools, Couple Space, Marriage Prep,
+Community, Events and Counsellor Support — requires an **active membership
+package**. Both packages **recur monthly**:
+
+| Package | Price / month | Matches | Counselling | Webinars | Groups |
+|---------|---------------|---------|-------------|----------|--------|
+| **Basic**   | KES 2,500 | up to 5   | 1 free session  | up to 5   | 1 group |
+| **Premium** | KES 3,500 | unlimited | 2 free sessions | unlimited | unlimited |
+
+Both include the full Learning Academy and Wellness Tools. A central router gate
+shows a feature-aware paywall on any locked route (with both packages to choose
+from); the Membership screen lets you switch package or cancel. Package **limits
+are enforced** in-app — reaching a Basic cap surfaces an upgrade-to-Premium
+prompt. ("One group membership" spans both Support Groups and Community Groups
+combined.) **Prototype — no payment is ever taken.** Crisis and safety helplines
+stay reachable from the paywall, always free.
 
 ### Learning Academy (fully built)
 
@@ -149,12 +176,17 @@ counsellor accounts and payments are simulated, with no backend.
 
 ## Try the flow
 
-1. **Get started → enter any code** (e.g. `H2H-KE-2026`) and tick the boxes.
+1. **Get started → tick the boxes** — no invitation code needed; anyone can join.
 2. Build a profile, then complete the **Relationship Readiness** assessment.
-3. Agree to the code of conduct and see your **Wellness Score**.
-4. On **Matches**, open someone and **Express interest** — they'll accept and the
-   chat unlocks. Someone will also have expressed interest in *you*.
-5. Chat, then try the **⋯** menu to report/block, or send a rude message to see
+3. Agree to the code of conduct and see your **Wellness Score**. A quick
+   **onboarding tour** runs the first time you reach Home (replay it anytime from
+   **You → App tour**). Browse freely — Home and Profile show every feature.
+4. Tap any feature (e.g. **Matches** or **Learn**) to hit the membership paywall,
+   then choose **Basic** or **Premium** (simulated — no payment is taken) to unlock
+   the app. Switch package or cancel from **You → Membership**.
+5. Open someone and **Express interest** — they'll accept and the chat unlocks.
+   Someone will also have expressed interest in *you*.
+6. Chat, then try the **⋯** menu to report/block, or send a rude message to see
    moderation kick in.
 
 Reset anytime from **You → Reset demo**.
