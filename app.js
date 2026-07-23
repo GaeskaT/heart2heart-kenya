@@ -21,10 +21,38 @@ const DEFAULT_STATE = {
   community:{ joined:[], posts:{} },
   events:{ rsvp:[] },
   premium:{ plan:"free" },
+  membership:{ plan:null, since:null },  // "basic" | "premium" — monthly, gates features per package
   progress:[],       // match/relationship progress reports for the counselling team
   listening:[],      // Listening Centre callback requests
   seededInbound:false,
+  tourSeen:false,    // has the first-run onboarding tour been shown/dismissed
 };
+
+/* Membership packages (KES / month, recurring). Anyone can register and browse;
+   using a feature requires an active package, and each package sets monthly limits.
+   Prototype — no payment is ever taken. */
+const MEMBERSHIP_PLANS = [
+  { id:"basic", name:"Basic", price:2500, tagline:"Everything you need to get started",
+    limits:{ matches:5, counselling:1, webinars:5, groups:1 },
+    features:[
+      "Up to 5 curated matches",
+      "1 free counselling session / month",
+      "Up to 5 webinars",
+      "1 group membership",
+      "Full Learning Academy & Wellness Tools",
+    ] },
+  { id:"premium", name:"Premium", price:3500, popular:true, tagline:"Unlimited access",
+    limits:{ matches:Infinity, counselling:2, webinars:Infinity, groups:Infinity },
+    features:[
+      "Unlimited matches",
+      "Unlimited webinars",
+      "Unlimited group memberships",
+      "2 free counselling sessions / month",
+      "Full Learning Academy & Wellness Tools",
+    ] },
+];
+const planById = id => MEMBERSHIP_PLANS.find(p => p.id === id) || null;
+const unlimited = n => n === Infinity;
 
 let S = load();
 let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
@@ -76,6 +104,107 @@ function sheet(html){
   const close = ()=>{ back.classList.remove("show"); setTimeout(()=>back.remove(),250); };
   back.addEventListener("click", e=>{ if(e.target===back) close(); });
   return { el:back, close };
+}
+
+/* ============================ Onboarding tour ============================
+   A lightweight spotlight/coach-mark walkthrough. Anchors to the fixed
+   bottom tab bar (always present on nav screens) so there's no scroll math.
+   Auto-runs once after onboarding; replayable from Profile. */
+let tourActive = false;
+const TOUR_STEPS = [
+  { center:true, title:"Welcome to Heart2Heart 💚",
+    body:"A calm, counsellor-guided space for building a healthy relationship. Here's a 20-second tour of how it works." },
+  { sel:'[data-nav=home]', title:"Home",
+    body:"Your daily check-in — a weekly reflection, your top match, and quick links to your tools." },
+  { sel:'[data-nav=matches]', title:"Matches",
+    body:"A few thoughtfully chosen people, each with clear reasons you fit. No endless swiping." },
+  { sel:'[data-nav=messages]', title:"Messages",
+    body:"No anonymous chat — a conversation only opens after both of you express interest." },
+  { sel:'[data-nav=learn]', title:"Learn",
+    body:"The Academy: short courses on communication, healthy love and growing together." },
+  { sel:'[data-nav=profile]', title:"You",
+    body:"Your wellness score, your journey and settings. You can replay this tour here anytime." },
+  { center:true, title:"You're all set 🌿",
+    body:"Take your time — healing first, healthy relationships next. Enjoy the journey." },
+];
+
+function startTour(){
+  if(tourActive) return;
+  if(parseHash().name !== "home"){ go("home"); }   // ensure the tab bar is present
+  tourActive = true;
+
+  const back = document.createElement("div");
+  back.className = "tour-back";
+  back.innerHTML = `
+    <div class="tour-hole" hidden></div>
+    <div class="tour-pop">
+      <div class="tour-dots">${TOUR_STEPS.map(()=>`<i></i>`).join("")}</div>
+      <h3 class="tour-title"></h3>
+      <p class="tour-body"></p>
+      <div class="tour-nav">
+        <button class="btn ghost sm" data-t="skip">Skip</button>
+        <div class="grow"></div>
+        <button class="btn secondary sm" data-t="back">Back</button>
+        <button class="btn sm" data-t="next">Next</button>
+      </div>
+    </div>`;
+  document.body.appendChild(back);
+  requestAnimationFrame(()=> back.classList.add("show"));
+
+  const hole = $(".tour-hole", back), pop = $(".tour-pop", back);
+  const titleEl = $(".tour-title", back), bodyEl = $(".tour-body", back);
+  const dots = $$(".tour-dots i", back);
+  const backBtn = $("[data-t=back]", back), nextBtn = $("[data-t=next]", back);
+  let i = 0;
+
+  function place(){
+    const step = TOUR_STEPS[i];
+    const target = step.center ? null : $(step.sel);
+    if(target){
+      // The tab bar sits at the bottom of a 100vh shell — if the visual viewport
+      // is shorter (mobile browser chrome), pull the target into view before measuring.
+      target.scrollIntoView({ block:"nearest", inline:"nearest" });
+      const r = target.getBoundingClientRect(), pad = 6;
+      hole.hidden = false;
+      hole.style.left = (r.left - pad) + "px";
+      hole.style.top = (r.top - pad) + "px";
+      hole.style.width = (r.width + pad*2) + "px";
+      hole.style.height = (r.height + pad*2) + "px";
+      back.classList.remove("solid");
+      pop.classList.remove("center");
+      const below = r.top < window.innerHeight/2;   // target in top half → pop below it
+      if(below){ pop.style.top = (r.bottom + 16) + "px"; pop.style.bottom = "auto"; }
+      else { pop.style.bottom = (window.innerHeight - r.top + 16) + "px"; pop.style.top = "auto"; }
+    } else {
+      hole.hidden = true;
+      back.classList.add("solid");
+      pop.classList.add("center");
+      pop.style.top = ""; pop.style.bottom = "";
+    }
+  }
+  function show(){
+    const step = TOUR_STEPS[i];
+    titleEl.textContent = step.title;
+    bodyEl.textContent = step.body;
+    dots.forEach((d,n)=> d.classList.toggle("on", n===i));
+    backBtn.style.visibility = i===0 ? "hidden" : "visible";
+    nextBtn.textContent = i===TOUR_STEPS.length-1 ? "Done" : "Next";
+    place();
+  }
+  function finish(){
+    if(!tourActive) return;
+    tourActive = false;
+    S.tourSeen = true; save();
+    window.removeEventListener("resize", place);
+    back.classList.remove("show");
+    setTimeout(()=> back.remove(), 250);
+  }
+
+  nextBtn.onclick = ()=>{ if(i>=TOUR_STEPS.length-1){ finish(); } else { i++; show(); } };
+  backBtn.onclick = ()=>{ if(i>0){ i--; show(); } };
+  $("[data-t=skip]", back).onclick = finish;
+  window.addEventListener("resize", place);
+  show();
 }
 
 const avatar = (name,color,cls="") =>
@@ -173,8 +302,15 @@ function cancelBooking(id){ const c = couns(); c.bookings = c.bookings.filter(b=
 function upcomingBookings(){
   return couns().bookings.slice().sort((a,b)=> (a.date+a.time).localeCompare(b.date+b.time));
 }
-function toggleWebinar(id){ const w = couns().webinars; const i = w.indexOf(id); if(i>=0) w.splice(i,1); else w.push(id); save(); return i<0; }
-function toggleGroup(id){ const g = couns().groups; const i = g.indexOf(id); if(i>=0) g.splice(i,1); else g.push(id); save(); return i<0; }
+// Toggles return true (added), false (removed), or "limit" (package cap reached)
+function toggleWebinar(id){ const w = couns().webinars; const i = w.indexOf(id);
+  if(i>=0){ w.splice(i,1); save(); return false; }
+  if(w.length >= planLimit("webinars")) return "limit";
+  w.push(id); save(); return true; }
+function toggleGroup(id){ const g = couns().groups; const i = g.indexOf(id);
+  if(i>=0){ g.splice(i,1); save(); return false; }
+  if(groupsJoined() >= planLimit("groups")) return "limit";
+  g.push(id); save(); return true; }
 function addQuestion(text){
   const q = { id:"q"+Date.now(), text, ts:Date.now(), reply:null };
   couns().questions.unshift(q); save(); return q;
@@ -239,7 +375,10 @@ function addCommunityPost(groupId, text){
   (c.posts[groupId] ||= []).push({ id:"p"+Date.now(), a:(S.user?.name||"You"), t:text, ts:Date.now(), mine:true });
   save();
 }
-function toggleCommunity(id){ const j = community().joined; const i = j.indexOf(id); if(i>=0) j.splice(i,1); else j.push(id); save(); return i<0; }
+function toggleCommunity(id){ const j = community().joined; const i = j.indexOf(id);
+  if(i>=0){ j.splice(i,1); save(); return false; }
+  if(groupsJoined() >= planLimit("groups")) return "limit";
+  j.push(id); save(); return true; }
 
 /* ---- Events ---- */
 function eventsState(){ if(!S.events) S.events = {rsvp:[]}; S.events.rsvp ||= []; return S.events; }
@@ -248,6 +387,16 @@ function toggleRSVP(id){ const r = eventsState().rsvp; const i = r.indexOf(id); 
 /* ---- Premium ---- */
 function currentPlan(){ if(!S.premium) S.premium = {plan:"free"}; return S.premium.plan || "free"; }
 function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save(); }
+
+/* ---- Membership packages (gate features + set monthly limits, simulated) ---- */
+function membershipState(){ if(!S.membership) S.membership = { plan:null, since:null }; return S.membership; }
+const member = () => !!membershipState().plan;
+function membershipPlan(){ return planById(membershipState().plan); }
+function planLimit(key){ const p = membershipPlan(); return p ? p.limits[key] : 0; }
+function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
+function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
+// "one group membership" spans both support groups and community groups
+function groupsJoined(){ return couns().groups.length + community().joined.length; }
 
 /* ---------------- Compatibility matcher ---------------- */
 /* Commitment scale, mirrored in SQL match_score() (migration 0009).
@@ -606,9 +755,14 @@ function render(){
   if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
   if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
 
+  // Membership gate — anyone can register and browse Home/Profile, but using any
+  // feature requires an active membership subscription.
+  const freeRoutes = ["home","profile","membership"];
+  const gated = S.onboarded && !member() && !freeRoutes.includes(name) && !openRoutes.includes(name);
+
   const fn = routes[name] || routes.home;
   const screen = $("#screen");
-  const out = fn(param) || { html:"" };
+  const out = gated ? membershipGate(name) : (fn(param) || { html:"" });
   screen.scrollTop = 0;
   screen.innerHTML = `<div class="fade-in">${out.html||""}</div>`;
 
@@ -621,6 +775,11 @@ function render(){
   updateBadge();
 
   if(out.mount) out.mount(screen);
+
+  // First-run onboarding tour — once, after onboarding, on the Home screen.
+  if(name==="home" && S.onboarded && !S.tourSeen && !tourActive){
+    setTimeout(()=>{ if(!S.tourSeen && parseHash().name==="home") startTour(); }, 350);
+  }
 }
 
 window.addEventListener("hashchange", render);
@@ -658,7 +817,7 @@ route("welcome", ()=>({
       <p class="tag">Healing first. Healthy relationships next.</p>
       <div class="valuelist stack">
         ${[
-          ["🌱","Counsellor-guided — for people who've done the inner work"],
+          ["🌱","Counsellor-guided — support is here whenever you want it"],
           ["🛡️","Verified members. No anonymous messaging, ever"],
           ["💞","A few thoughtful matches, not endless swiping"],
           ["💍","A path from healthy dating toward marriage"],
@@ -666,9 +825,8 @@ route("welcome", ()=>({
       </div>
     </div>
     <div class="stack">
-      <button class="btn secondary" data-act="begin">I have a counsellor invitation</button>
-      <p class="center tiny" style="opacity:.85">Membership is by counsellor approval. Already a member? Continue below.</p>
-      <button class="btn" data-act="begin">Get started</button>
+      <button class="btn" data-act="begin">Get started — free to explore</button>
+      <p class="center tiny" style="opacity:.85">Open to any adult ready for a healthy relationship. No invitation needed.</p>
       ${Backend.enabled()?`<button class="btn ghost" data-act="login" style="color:#fff">Log in</button>`:""}
       ${installPrompt?`<button class="btn ghost" data-act="install" style="color:#fff">📲 Install app</button>`:""}
     </div>
@@ -714,29 +872,27 @@ route("login", ()=>({
 /* ---- Invite / eligibility ---- */
 route("invite", ()=>({
   html:`
-  <div class="topbar"><button class="back" data-act="back">←</button><h2>Counsellor invitation</h2></div>
+  <div class="topbar"><button class="back" data-act="back">←</button><h2>Getting started</h2></div>
   <div class="pad stack">
-    <div class="callout teal">🔒 Heart2Heart is exclusive to adults who have completed individual or relationship counselling and are emotionally ready to connect.</div>
-    <label class="field"><span>Invitation code from your counsellor</span>
-      <input class="input" id="code" placeholder="e.g. H2H-KE-2026" autocapitalize="characters"></label>
+    <div class="callout teal">💚 Heart2Heart is open to any adult who's emotionally ready to build a healthy, intentional relationship. No invitation needed — just register to explore. Counselling is offered and encouraged throughout.</div>
     <div class="card flat stack">
       <p class="tiny muted">Please confirm the following to continue:</p>
       ${[
         "I am 18 years or older.",
-        "I have completed counselling and feel ready.",
+        "I'm emotionally ready to build a healthy relationship.",
         "I'm seeking a healthy, respectful relationship.",
       ].map((t,i)=>`<label class="row" style="align-items:flex-start"><input type="checkbox" class="elig" data-i="${i}" style="margin-top:3px"> <span class="tiny">${t}</span></label>`).join("")}
     </div>
-    <button class="btn" id="verify" disabled>Verify & continue</button>
-    <p class="center tiny faint">Don't have a code? Ask your counsellor to sponsor you, or book an intake session in-app.</p>
+    <button class="btn" id="verify" disabled>Continue</button>
+    <p class="center tiny faint">Anyone can register and explore. A membership subscription unlocks the features when you're ready.</p>
   </div>`,
   mount(root){
     $(".back",root).onclick = ()=> go("welcome");
-    const code = $("#code",root), verify = $("#verify",root);
+    const verify = $("#verify",root);
     const boxes = $$(".elig",root);
-    const check = ()=>{ verify.disabled = !(code.value.trim().length>=3 && boxes.every(b=>b.checked)); };
-    code.oninput = check; boxes.forEach(b=> b.onchange = check);
-    verify.onclick = ()=>{ pendingInvite = code.value.trim(); toast("Invitation verified ✓"); go("signup"); };
+    const check = ()=>{ verify.disabled = !boxes.every(b=>b.checked); };
+    boxes.forEach(b=> b.onchange = check);
+    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to Heart2Heart 💚"); go("signup"); };
   }
 }));
 
@@ -1047,7 +1203,14 @@ route("home", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your top match</h3><a href="#/matches">See all</a></div>
-    ${topMatch ? matchCardHTML(topMatch)
+    ${!member()
+      ? `<button class="card center" id="home-membership" style="width:100%;cursor:pointer;border:none">
+          <div style="font-size:30px">💞</div>
+          <b style="display:block;margin-top:4px">Your matches are ready</b>
+          <p class="tiny faint" style="margin-top:4px">Choose a membership from ${esc(fmtKes(MEMBERSHIP_PLANS[0].price))}/mo to unlock matches and everything else.</p>
+          <span class="chip" style="margin-top:10px">See membership →</span>
+        </button>`
+      : topMatch ? matchCardHTML(topMatch)
       : !warm ? `<div class="card center"><p class="tiny faint">Finding your matches…</p></div>`
       : `<div class="card center"><p class="tiny faint">No new matches right now — we release them thoughtfully.</p></div>`}
 
@@ -1066,6 +1229,7 @@ route("home", ()=>{
   </div>`,
   mount(root){
     $("#reflect",root).onclick = ()=> openReflection(WEEKLY_PROMPTS[new Date().getDay()%WEEKLY_PROMPTS.length]);
+    const hm = $("#home-membership",root); if(hm) hm.onclick = ()=> go("membership");
     wireMatchCards(root);
     wireFeatureRows(root);
   }};
@@ -1119,9 +1283,11 @@ route("matches", ()=>{
 
   const inbound = inboundList();
   const inboundIds = new Set(inbound.map(m => m.c.id));
-  // "a limited number of carefully selected matches" — and don't repeat the
-  // people already shown under "Interested in you"
-  const list = matchesList().filter(m => !inboundIds.has(m.c.id) && statusFor(m.c.id) !== "blocked").slice(0,4);
+  // Cap the curated set to the member's package (Basic: 5, Premium: unlimited).
+  const cap = planLimit("matches");
+  const pool = matchesList().filter(m => !inboundIds.has(m.c.id) && statusFor(m.c.id) !== "blocked");
+  const list = unlimited(cap) ? pool : pool.slice(0, cap);
+  const plan = membershipPlan();
   return {
   html:`
   <div class="pad">
@@ -1135,9 +1301,142 @@ route("matches", ()=>{
     ${list.length ? list.map(matchCardHTML).join("")
       : `<div class="empty"><div class="ico">💞</div><p>No new matches right now.<br>We release them thoughtfully — check back soon.</p></div>`}
 
-    <div class="callout gold" style="margin-top:16px">🔄 New matches are released thoughtfully. Take your time with these first.</div>
+    ${plan && !unlimited(cap)
+      ? `<button class="callout gold" id="matches-upsell" style="width:100%;text-align:left;margin-top:16px;border:none;cursor:pointer">⭐ Your ${esc(plan.name)} plan shows up to ${cap} matches. <b>Upgrade to Premium</b> for unlimited →</button>`
+      : `<div class="callout gold" style="margin-top:16px">🔄 New matches are released thoughtfully. Take your time with these first.</div>`}
   </div>`,
-  mount(root){ wireMatchCards(root); }};
+  mount(root){ wireMatchCards(root); const u=$("#matches-upsell",root); if(u) u.onclick=()=>go("membership"); }};
+});
+
+/* ---- Membership gate (shown in place of any feature until membership is active) ----
+   Anyone can register and browse Home/Profile; using a feature needs a subscription. */
+const FEATURE_LABELS = {
+  matches:"Matches", match:"this profile", messages:"Messages", chat:"this conversation",
+  learn:"the Learning Academy", course:"this course", lesson:"this lesson",
+  wellness:"Wellness Tools", breathing:"Guided breathing", gratitude:"the Gratitude journal",
+  checkin:"the Wellness check-in", listening:"the Listening Centre",
+  counselling:"Counsellor Support", book:"session booking", ask:"Ask a question",
+  webinars:"Webinars", groups:"Support groups",
+  couple:"Couple Space", marriage:"Marriage Preparation", community:"Community Groups",
+  cgroup:"this group", events:"Events", premium:"Premium",
+};
+/* Two package cards, reused by the gate and the membership screen. */
+function membershipPlansHTML(currentId){
+  return MEMBERSHIP_PLANS.map(p=>{
+    const cur = p.id===currentId;
+    return `<div class="card plan-card ${p.popular?"popular":""} ${cur?"active":""}" style="margin-bottom:12px;position:relative">
+      ${p.popular?`<span class="chip gold" style="position:absolute;top:-9px;right:16px">Most popular</span>`:""}
+      <div class="row between"><b style="font-size:17px">${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
+      <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(fmtKes(p.price))}</span><span class="tiny faint">/month</span></div>
+      <p class="tiny faint">${esc(p.tagline)}</p>
+      <div class="stack" style="margin-top:12px">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
+      ${cur ? `<button class="btn secondary" disabled style="margin-top:14px">Your current plan</button>`
+            : `<button class="btn ${p.popular?"":"secondary"}" data-plan="${p.id}" style="margin-top:14px">Choose ${esc(p.name)}</button>`}
+    </div>`;
+  }).join("");
+}
+function wirePlanButtons(root){
+  $$("[data-plan]",root).forEach(b=> b.onclick = ()=> openMembershipSheet(b.dataset.plan));
+}
+
+function membershipGate(routeName){
+  const label = FEATURE_LABELS[routeName] || "this feature";
+  return {
+  html:`
+  <div class="pad">
+    <div class="topbar" style="padding:0 0 4px"><button class="back" data-act="home">←</button><h2 class="grow">Members only</h2></div>
+    <p class="muted tiny">You're registered and free to explore. To open <b>${esc(label)}</b> — and everything else — choose a monthly membership.</p>
+
+    <div style="margin-top:16px">${membershipPlansHTML(null)}</div>
+
+    <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
+    <button class="list-row" id="gate-crisis" style="width:100%;text-align:left;margin-top:12px">
+      <div class="lico" style="background:var(--coral-50)">🆘</div>
+      <div class="grow"><b>In crisis or unsafe right now?</b><div class="sub">Get immediate help &amp; helplines — always free</div></div>
+      <div class="chev">›</div>
+    </button>
+  </div>`,
+  mount(root){
+    $("[data-act=home]",root).onclick = ()=> go("home");
+    wirePlanButtons(root);
+    const cr = $("#gate-crisis",root); if(cr) cr.onclick = openCrisisHelp;
+  }};
+}
+
+function openMembershipSheet(planId){
+  const p = planById(planId); if(!p) return;
+  const box = sheet(`
+    <div class="center"><div style="font-size:38px">💚</div>
+      <h3 style="margin-top:6px">${esc(p.name)} — ${esc(fmtKes(p.price))}/month</h3>
+      <p class="muted tiny" style="margin:8px 0 4px">Recurring monthly. Cancel anytime.</p>
+      <div class="stack" style="text-align:left;margin:10px 0">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
+      <div class="callout gold" style="text-align:left;margin:4px 0 0">🔒 This is a prototype — no payment method is requested and no money is taken.</div></div>
+    <button class="btn" id="pay" style="margin-top:12px">Subscribe ${esc(fmtKes(p.price))}/mo (demo)</button>
+    <button class="btn ghost" id="cancel" style="margin-top:6px">Not now</button>`);
+  $("#cancel",box.el).onclick = box.close;
+  $("#pay",box.el).onclick = ()=>{
+    activateMembership(p.id);
+    box.close();
+    toast(`${p.name} membership active 💚`);
+    render();
+  };
+}
+
+/* Upsell shown when a package limit is reached. */
+const LIMIT_NOUNS = { matches:"matches", webinars:"webinars", groups:"group memberships", counselling:"free counselling sessions" };
+function openUpsell(key){
+  const p = membershipPlan(), noun = LIMIT_NOUNS[key] || "items", lim = planLimit(key);
+  const premium = planById("premium");
+  const canUpgrade = p && p.id !== "premium" && premium.limits[key] > lim;
+  const premAllow = unlimited(premium.limits[key]) ? "unlimited" : premium.limits[key];
+  const line = canUpgrade
+    ? `Upgrade to <b>Premium</b> for ${premAllow} ${esc(noun)}.`
+    : `That's the monthly allowance included in your plan.`;
+  const box = sheet(`
+    <div class="center"><div style="font-size:36px">⭐</div>
+      <h3 style="margin-top:6px">You've reached your ${esc(noun)} limit</h3>
+      <p class="muted tiny" style="margin:8px 0 4px">Your ${esc(p?p.name:"")} plan includes ${unlimited(lim)?"unlimited":lim} ${esc(noun)} per month. ${line}</p></div>
+    ${canUpgrade ? `<button class="btn" id="up">See Premium</button>
+    <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`
+    : `<button class="btn" id="no">Got it</button>`}`);
+  $("#no",box.el).onclick = box.close;
+  const up = $("#up",box.el); if(up) up.onclick = ()=>{ box.close(); go("membership"); };
+}
+
+/* ---- Membership screen (choose / switch / cancel a package) ---- */
+route("membership", ()=>{
+  const plan = membershipPlan();
+  const since = plan ? fmtDate(new Date(membershipState().since || Date.now())) : "";
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Membership</h2></div>
+  <div class="pad">
+    ${plan ? `
+    <div class="card" style="text-align:center;margin-top:8px">
+      <div style="font-size:40px">💚</div>
+      <h3 style="margin-top:6px">${esc(plan.name)} membership · active</h3>
+      <p class="tiny faint" style="margin-top:4px">Active since ${esc(since)} · ${esc(fmtKes(plan.price))}/month, recurring</p>
+    </div>
+    <div class="sec-h"><h3>Your plan</h3></div>
+    ${membershipPlansHTML(plan.id)}
+    <div class="list-row" data-act="cancel" style="margin-top:4px"><div class="lico">⏸️</div><div class="grow"><b>Cancel membership</b><div class="sub">Keep browsing; features lock until you resubscribe</div></div><div class="chev">›</div></div>
+    <p class="center tiny faint" style="margin-top:16px">Prototype — no payment is ever taken.</p>
+    ` : `
+    <p class="muted tiny">You're registered and free to explore. Choose a monthly membership to unlock the features. Every package recurs monthly — cancel anytime.</p>
+    <div style="margin-top:16px">${membershipPlansHTML(null)}</div>
+    <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
+    `}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
+    wirePlanButtons(root);
+    const cx = $("[data-act=cancel]",root); if(cx) cx.onclick = ()=>{
+      const box = sheet(`<h3>Cancel membership?</h3><p class="muted tiny" style="margin:8px 0 14px">You'll keep your profile and can still browse, but features will lock until you resubscribe.</p>
+        <button class="btn danger" id="yes">Yes, cancel</button><button class="btn ghost" id="no" style="margin-top:6px">Keep membership</button>`);
+      $("#no",box.el).onclick = box.close;
+      $("#yes",box.el).onclick = ()=>{ cancelMembership(); box.close(); toast("Membership cancelled"); go("home"); };
+    };
+  }};
 });
 
 /* ---- Match detail ---- */
@@ -1694,16 +1993,17 @@ route("profile", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your journey</h3></div>
+    ${featureRow("membership","💚","Membership", member()?`${membershipPlan().name} · ${fmtKes(membershipPlan().price)}/mo`:`Choose a plan from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/mo`)}
     ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
     ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
     ${(()=>{ const n=community().joined.length; const sub = n?`${n} group${n>1?"s":""} joined`:"Moderated groups by life stage"; return featureRow("community","🌍","Community Groups",sub); })()}
     ${(()=>{ const n=eventsState().rsvp.length; const sub = n?`${n} event${n>1?"s":""} · you're going`:"Mixers, seminars & retreats"; return featureRow("events","📅","Events",sub); })()}
     ${featureRow("counselling","🧑‍⚕️","Counsellor Support","Sessions, webinars & support groups")}
     ${featureRow("wellness","🧘","Wellness Tools","Mood, gratitude & reflection")}
-    ${(()=>{ const pl=PREMIUM_PLANS.find(p=>p.id===currentPlan()); const sub = currentPlan()!=="free"?`${pl.name} plan · active`:"Unlimited counselling & coaching"; return featureRow("premium","⭐","Premium",sub); })()}
 
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
+    <div class="list-row" data-act="tour" style="margin-top:10px"><div class="lico">🧭</div><div class="grow"><b>App tour</b><div class="sub">Replay the quick intro walkthrough</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
     ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add Heart2Heart to your home screen</div></div><div class="chev">›</div></div>`:""}
     ${Backend.enabled()?`<div class="list-row" data-act="signout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Sign out</b><div class="sub">End your session on this device</div></div><div class="chev">›</div></div>`:""}
@@ -1713,6 +2013,7 @@ route("profile", ()=>{
   mount(root){
     wireFeatureRows(root);
     $("[data-act=edit]",root).onclick = ()=> go("signup");
+    $("[data-act=tour]",root).onclick = ()=>{ go("home"); setTimeout(startTour, 400); };
     const insRow = $("[data-act=install]",root); if(insRow) insRow.onclick = doInstall;
     $("[data-act=dataprotection]",root).onclick = ()=>{
       const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔒</span><h3 class="grow">${esc(DATA_PROTECTION.title)}</h3></div>
@@ -2215,6 +2516,8 @@ route("book", ()=>{
     $$("[data-slot]",root).forEach(b=> b.onclick = ()=>{ bookDraft.slot=b.dataset.slot; rerender(); });
 
     $("#confirm",root).onclick = async ()=>{
+      // Enforce the package's monthly free-counselling-session allowance.
+      if((bookingsList()||[]).length >= planLimit("counselling")){ openUpsell("counselling"); return; }
       const cn = Backend.enabled() ? counsellorNamed(bookDraft.counsellor) : counsellorById(bookDraft.counsellor);
       const shortName = (cn && cn.name ? cn.name.split(" ").slice(-1)[0] : "your counsellor");
 
@@ -2419,6 +2722,7 @@ route("webinars", ()=>({
     $("[data-act=back]",root).onclick = ()=> go("counselling");
     $$("[data-reg]",root).forEach(b=> b.onclick = ()=>{
       const now = toggleWebinar(b.dataset.reg);
+      if(now==="limit"){ openUpsell("webinars"); return; }
       toast(now?"Registered — see you there 🎓":"Registration cancelled");
       render();
     });
@@ -2449,6 +2753,7 @@ route("groups", ()=>({
     $("[data-act=back]",root).onclick = ()=> go("counselling");
     $$("[data-join]",root).forEach(b=> b.onclick = ()=>{
       const now = toggleGroup(b.dataset.join);
+      if(now==="limit"){ openUpsell("groups"); return; }
       toast(now?"Welcome to the group 👋":"You've left the group");
       render();
     });
@@ -2813,7 +3118,7 @@ route("community", ()=>({
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
-    $$("[data-join]",root).forEach(b=> b.onclick = ()=>{ const now=toggleCommunity(b.dataset.join); toast(now?"Joined 👋":"Left group"); render(); });
+    $$("[data-join]",root).forEach(b=> b.onclick = ()=>{ const now=toggleCommunity(b.dataset.join); if(now==="limit"){ openUpsell("groups"); return; } toast(now?"Joined 👋":"Left group"); render(); });
     $$("[data-open]",root).forEach(b=> b.onclick = ()=> go("cgroup", b.dataset.open));
   }
 }));
@@ -2840,7 +3145,7 @@ route("cgroup", (id)=>{
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> go("community");
-    $("[data-join]",root).onclick = ()=>{ toggleCommunity(id); render(); };
+    $("[data-join]",root).onclick = ()=>{ if(toggleCommunity(id)==="limit"){ openUpsell("groups"); return; } render(); };
     $("#ppost",root).onclick = ()=>{ const t=$("#ptext",root).value.trim(); if(t.length<2){toast("Write something first");return;}
       addCommunityPost(id,t); toast("Posted"); render(); };
   }};
@@ -2874,8 +3179,10 @@ route("events", ()=>({
   }
 }));
 
-/* ================================ Premium ================================ */
-route("premium", ()=>{
+/* ================================ Premium ================================
+   Superseded by membership packages (Basic/Premium) — redirect to Membership. */
+route("premium", ()=> go("membership"));
+route("premium-legacy", ()=>{
   const plan = currentPlan();
   return {
   html:`

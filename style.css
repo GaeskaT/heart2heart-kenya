@@ -266,6 +266,23 @@ textarea.input{ resize:vertical; min-height:84px; }
 .sheet-back.show .sheet{ transform:none; }
 .sheet .grab{ width:40px; height:4px; border-radius:99px; background:var(--line); margin:0 auto 14px; }
 
+/* ---------- Onboarding tour (spotlight coach-marks) ---------- */
+.tour-back{ position:fixed; inset:0; z-index:90; opacity:0; transition:opacity .2s; }
+.tour-back.show{ opacity:1; }
+.tour-back.solid{ background:rgba(16,30,29,.62); }   /* dim for centered (no-target) steps */
+.tour-hole{ position:fixed; border-radius:14px; background:transparent;
+  box-shadow:0 0 0 100vmax rgba(16,30,29,.62); border:2px solid rgba(255,255,255,.92);
+  transition:left .25s, top .25s, width .25s, height .25s; pointer-events:none; }
+.tour-pop{ position:fixed; left:50%; transform:translateX(-50%); width:calc(100% - 40px); max-width:360px;
+  background:#fff; border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:18px; z-index:91; }
+.tour-pop.center{ top:50%; transform:translate(-50%,-50%); }
+.tour-title{ font-size:18px; margin:8px 0 6px; }
+.tour-body{ font-size:14px; color:var(--ink-soft); line-height:1.5; }
+.tour-nav{ display:flex; align-items:center; gap:8px; margin-top:16px; }
+.tour-dots{ display:flex; gap:6px; }
+.tour-dots i{ width:6px; height:6px; border-radius:50%; background:var(--line); transition:.2s; }
+.tour-dots i.on{ background:var(--teal-600); width:18px; border-radius:99px; }
+
 /* ---------- Empty state ---------- */
 .empty{ text-align:center; padding:50px 30px; color:var(--ink-faint); }
 .empty .ico{ font-size:44px; }
