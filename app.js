@@ -409,6 +409,11 @@ function planLimit(key){ const p = membershipPlan(); return (p && !membershipExp
 function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
 function renewMembership(){ const m = membershipState(); if(m.plan){ m.since = Date.now(); save(); } }
 function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
+/* After a package is activated or renewed, drop the member on the main page.
+   (go() is a no-op when the hash already matches, so re-render explicitly.) */
+function goHomeAfterActivation(){
+  if(parseHash().name === "home") render(); else go("home");
+}
 // "one group membership" spans both support groups and community groups
 function groupsJoined(){ return couns().groups.length + community().joined.length; }
 
@@ -1450,7 +1455,7 @@ function membershipGate(routeName){
     $("[data-act=home]",root).onclick = ()=> go("home");
     const gr = $("#gate-renew",root); if(gr) gr.onclick = ()=>{
       const p = membershipPlan();
-      renewMembership(); toast(`🎉 ${p.name} renewed — welcome back!`); render();
+      renewMembership(); toast(`🎉 ${p.name} renewed — welcome back!`); goHomeAfterActivation();
     };
     wirePlanButtons(root);
     const cr = $("#gate-crisis",root); if(cr) cr.onclick = openCrisisHelp;
@@ -1472,7 +1477,7 @@ function openMembershipSheet(planId){
     activateMembership(p.id);
     box.close();
     toast(`${p.name} membership active 💚`);
-    render();
+    goHomeAfterActivation();
   };
 }
 
@@ -1543,7 +1548,7 @@ route("membership", ()=>{
         <button class="btn" id="yes">Renew now (demo)</button>
         <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`);
       $("#no",box.el).onclick = box.close;
-      $("#yes",box.el).onclick = ()=>{ renewMembership(); box.close(); toast(`🎉 ${p.name} renewed — welcome back!`); render(); };
+      $("#yes",box.el).onclick = ()=>{ renewMembership(); box.close(); toast(`🎉 ${p.name} renewed — welcome back!`); goHomeAfterActivation(); };
     };
     wirePlanButtons(root);
     const cx = $("[data-act=cancel]",root); if(cx) cx.onclick = ()=>{
