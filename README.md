@@ -80,31 +80,28 @@ The four stages of the member journey are implemented end to end:
 ### Membership (access model)
 
 Registration is **open and free** — anyone can create a profile and *browse* the
-whole app (Home and Profile show every feature). *Using* a feature — Matches,
-Messages, the Learning Academy, Wellness Tools, Couple Space, Marriage Prep,
-Community, Events and Counsellor Support — requires an **active membership
-package**. Both packages **recur monthly**:
+app (Home and Profile show every feature). *Using* a feature requires an **active
+membership package**. Finishing onboarding ("Meet your matches") lands you
+straight on the subscribe screen.
 
-| Package | Price / month | Matches | Counselling | Webinars | Groups |
-|---------|---------------|---------|-------------|----------|--------|
-| **Basic**   | KES 2,500 | up to 5   | 1 free session  | up to 5   | 1 group |
-| **Premium** | KES 3,500 | unlimited | 2 free sessions | unlimited | unlimited |
+| Package | Price | Matches | Counselling | Webinars | Groups | Other services |
+|---------|-------|---------|-------------|----------|--------|----------------|
+| **Weekly**  | KES 300 / **week**  | up to 3   | —               | —         | —         | ✗ locked |
+| **Basic**   | KES 2,500 / month   | up to 5   | 1 free session  | up to 5   | 1 group   | ✓ |
+| **Premium** | KES 3,500 / month   | unlimited | 2 free sessions | unlimited | unlimited | ✓ |
 
-Both include the full Learning Academy and Wellness Tools. A central router gate
-shows a feature-aware paywall on any locked route (with both packages to choose
-from); the Membership screen lets you switch package or cancel. Package **limits
-are enforced** in-app — reaching a Basic cap surfaces an upgrade-to-Premium
-prompt. ("One group membership" spans both Support Groups and Community Groups
-combined.) **Prototype — no payment is ever taken.** Crisis and safety helplines
-stay reachable from the paywall, always free.
+**Weekly** is a matching-only tier: it unlocks Matches (max 3) and mutual-consent
+messaging with those matches, and nothing else. Every other service — Wellness
+Tools, Counsellor Support, Couple Space, Marriage Prep, Community and Events —
+needs **Basic or Premium**; a Weekly member hitting one sees an "Upgrade needed"
+screen.
 
-### Learning Academy (fully built)
-
-10 courses / 35 lessons of real, readable content — course detail pages, a
-lesson reader (intro → sections → key takeaways → reflection prompt), completion
-tracking, per-course and overall progress bars, a "continue learning" resume
-card, and a course-complete celebration. Progress persists in `localStorage` and
-rolls up onto the Home and Learn screens.
+A central router gate enforces this by tier, so locked routes can't be reached by
+deep-linking either. The Membership screen lets you switch package or cancel.
+Usage **limits are enforced** in-app — hitting a cap surfaces an upgrade prompt.
+("One group membership" spans Support Groups and Community Groups combined.)
+**Prototype — no payment is ever taken.** Crisis and safety helplines stay
+reachable from the paywall, always free.
 
 ### Wellness Tools (fully built)
 
@@ -135,8 +132,8 @@ Professional support throughout the journey, all persisted in `localStorage`:
   acknowledges each question (a counsellor follows up).
 - **Webinars** — register / cancel for live counsellor-led sessions.
 - **Support groups** — join / leave moderated groups by life season.
-- **Resources** — a small library that deep-links into Academy courses, plus
-  info cards (including Kenya crisis/safety helplines and when to seek help).
+- **Resources** — a small library of info cards (including Kenya crisis/safety
+  helplines and when to seek help).
 
 ### Couple Space, Marriage Prep, Community, Events & Premium (fully built)
 
@@ -171,7 +168,6 @@ counsellor accounts and payments are simulated, with no backend.
 | `index.html` | App shell + bottom tab bar |
 | `style.css`  | Design system (warm, calm, trustworthy; mobile-first) |
 | `data.js`    | Seed data: candidate pool, readiness questions, counties, content |
-| `lessons.js` | Learning Academy: 10 courses / 35 lessons of content |
 | `app.js`     | SPA engine: hash router, state, compatibility matcher, all screens |
 
 ## Try the flow
@@ -181,9 +177,10 @@ counsellor accounts and payments are simulated, with no backend.
 3. Agree to the code of conduct and see your **Wellness Score**. A quick
    **onboarding tour** runs the first time you reach Home (replay it anytime from
    **You → App tour**). Browse freely — Home and Profile show every feature.
-4. Tap any feature (e.g. **Matches** or **Learn**) to hit the membership paywall,
-   then choose **Basic** or **Premium** (simulated — no payment is taken) to unlock
-   the app. Switch package or cancel from **You → Membership**.
+4. You land on the subscribe screen. Choose **Weekly**, **Basic** or **Premium**
+   (simulated — no payment is taken). Weekly unlocks matching only; tap e.g.
+   **Counsellor Support** to see the "Upgrade needed" screen. Switch package or
+   cancel from **You → Membership**.
 5. Open someone and **Express interest** — they'll accept and the chat unlocks.
    Someone will also have expressed interest in *you*.
 6. Chat, then try the **⋯** menu to report/block, or send a rude message to see

@@ -132,7 +132,6 @@ const DATE_IDEAS = [
   "Sunset at a viewpoint with your phones away.",
 ];
 
-/* Academy course + lesson content now lives in lessons.js (COURSES). */
 
 /* ---- Wellness Tools content ---- */
 const MOODS = [
