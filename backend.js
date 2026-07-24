@@ -61,6 +61,19 @@ const Backend = (() => {
     return data;
   }
   async function signOut(){ if (client) await client.auth.signOut(); }
+  /* Emails a reset link back to this app; the link opens with a recovery session
+     so the member can set a new password via updatePassword(). */
+  async function resetPassword(email){
+    const redirectTo = location.origin + location.pathname + "#/reset";
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+    return true;
+  }
+  async function updatePassword(password){
+    const { error } = await client.auth.updateUser({ password });
+    if (error) throw error;
+    return true;
+  }
   async function getUser(){
     if (!enabled()) return null;
     const { data } = await client.auth.getUser();
@@ -506,7 +519,7 @@ const Backend = (() => {
 
   return {
     init, enabled, configured,
-    signUp, signIn, signOut, getUser,
+    signUp, signIn, signOut, getUser, resetPassword, updatePassword,
     redeemInvite, saveProfile, setOnboarded, getProfile, fromRow,
     saveReadiness, saveConsent,
     // Phase 1

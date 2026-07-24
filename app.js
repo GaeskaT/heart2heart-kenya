@@ -409,9 +409,19 @@ function planLimit(key){ const p = membershipPlan(); return (p && !membershipExp
 function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
 function renewMembership(){ const m = membershipState(); if(m.plan){ m.since = Date.now(); save(); } }
 function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
-/* After a package is activated or renewed, drop the member on the main page.
-   (go() is a no-op when the hash already matches, so re-render explicitly.) */
-function goHomeAfterActivation(){
+/* Where a paywall was hit, so activation can continue into what they wanted. */
+let gateIntentHash = null;
+
+/* After activating or renewing: if they subscribed from a feature's paywall and
+   the new package covers it, carry them into that feature (the hash never
+   changed, so a re-render reveals it). Otherwise land on the main page. */
+function afterActivation(){
+  const intent = gateIntentHash;
+  gateIntentHash = null;
+  if(intent && location.hash === intent && planTier() >= routeMinTier(parseHash().name)){
+    render();
+    return;
+  }
   if(parseHash().name === "home") render(); else go("home");
 }
 // "one group membership" spans both support groups and community groups
@@ -814,10 +824,10 @@ function render(){
   if(name !== "chat" && chatUnsub){ try{ chatUnsub(); }catch(e){} chatUnsub = null; }
 
   // Onboarding guard
-  const openRoutes = ["welcome","login","invite","signup","readiness","conduct","result"];
+  const openRoutes = ["welcome","login","reset","invite","signup","readiness","conduct","result"];
   // Privacy lock — once logged out, nothing personal renders until you continue.
   if(S.loggedOut){
-    if(!["welcome","login","invite","signup"].includes(name)) return go("welcome");
+    if(!["welcome","login","reset","invite","signup"].includes(name)) return go("welcome");
   }
   else if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
   else if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
@@ -927,10 +937,12 @@ route("login", ()=>({
     <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
     <label class="field"><span>Password</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password"></label>
     <button class="btn" id="login">Log in</button>
-    <p class="center tiny faint">New here? <a href="#/invite">Start with an invitation</a></p>
+    <button class="btn ghost" id="forgot">Forgot your password?</button>
+    <p class="center tiny faint">New here? <a href="#/invite">Create an account</a></p>
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> go("welcome");
+    $("#forgot",root).onclick = ()=> openPasswordReset($("#email",root).value.trim());
     $("#login",root).onclick = async ()=>{
       const email = $("#email",root).value.trim(), password = $("#password",root).value;
       if(!email || !password){ toast("Enter your email and password"); return; }
@@ -944,6 +956,77 @@ route("login", ()=>({
         go(S.onboarded ? "home" : "invite");
       }catch(e){
         toast(e.message || "Login failed"); btn.disabled = false; btn.textContent = "Log in";
+      }
+    };
+  }
+}));
+
+/* ---- Password reset ----
+   Supabase mode emails a recovery link back to #/reset. With no backend
+   configured there are no passwords at all, so we say so plainly. */
+function openPasswordReset(prefill){
+  if(!Backend.enabled()){
+    const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔑</span><h3 class="grow">No password to reset</h3></div>
+      <p class="muted tiny" style="margin:10px 0 4px">This demo runs entirely on your device and never asks for a password, so there's nothing to reset.</p>
+      <p class="tiny faint" style="margin:0 0 14px">Once Heart2Heart is connected to its live backend, this is where you'd receive a reset link by email.</p>
+      <button class="btn" id="ok">Got it</button>`);
+    $("#ok",box.el).onclick = box.close;
+    return;
+  }
+  const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔑</span><h3 class="grow">Reset your password</h3></div>
+    <p class="muted tiny" style="margin:10px 0 12px">Enter your email and we'll send you a secure link to choose a new password.</p>
+    <label class="field"><span>Email</span><input class="input" id="rsemail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(prefill||"")}"></label>
+    <button class="btn" id="send" style="margin-top:12px">Send reset link</button>
+    <button class="btn ghost" id="cancel" style="margin-top:6px">Cancel</button>`);
+  $("#cancel",box.el).onclick = box.close;
+  $("#send",box.el).onclick = async ()=>{
+    const email = $("#rsemail",box.el).value.trim();
+    if(!/.+@.+\..+/.test(email)){ toast("Enter a valid email"); return; }
+    const b = $("#send",box.el); b.disabled = true; b.textContent = "Sending…";
+    try{
+      await Backend.resetPassword(email);
+      box.close();
+      toast("📧 Reset link sent — check your email");
+    }catch(e){
+      // Don't reveal whether an account exists — same message either way.
+      box.close();
+      toast("📧 If that email has an account, a reset link is on its way");
+      console.warn("[auth] resetPassword", e);
+    }
+  };
+}
+
+/* Landing screen for the emailed recovery link. */
+route("reset", ()=>({
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2>Choose a new password</h2></div>
+  <div class="pad stack">
+    ${Backend.enabled() ? `
+    <p class="muted tiny">Enter a new password for your Heart2Heart account. Use at least 6 characters.</p>
+    <label class="field"><span>New password</span><input class="input" id="pw1" type="password" autocomplete="new-password" placeholder="New password"></label>
+    <label class="field"><span>Confirm new password</span><input class="input" id="pw2" type="password" autocomplete="new-password" placeholder="Repeat it"></label>
+    <button class="btn" id="save">Save new password</button>
+    <p class="center tiny faint">Open this page from the link in your reset email, so we know it's you.</p>
+    ` : `
+    <div class="callout gold">🔑 This demo has no accounts or passwords — there's nothing to reset here.</div>
+    <button class="btn" id="home">Back to Heart2Heart</button>
+    `}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("welcome");
+    const h = $("#home",root); if(h) h.onclick = ()=> go("welcome");
+    const save = $("#save",root); if(save) save.onclick = async ()=>{
+      const a = $("#pw1",root).value, b = $("#pw2",root).value;
+      if(a.length < 6){ toast("Use at least 6 characters"); return; }
+      if(a !== b){ toast("Those passwords don't match"); return; }
+      save.disabled = true; save.textContent = "Saving…";
+      try{
+        await Backend.updatePassword(a);
+        toast("✅ Password updated — you're signed in");
+        go(S.onboarded ? "home" : "invite");
+      }catch(e){
+        toast(e.message || "That reset link has expired — request a new one");
+        save.disabled = false; save.textContent = "Save new password";
       }
     };
   }
@@ -1452,10 +1535,11 @@ function membershipGate(routeName){
     </button>
   </div>`,
   mount(root){
+    gateIntentHash = location.hash;   // remember what they were trying to open
     $("[data-act=home]",root).onclick = ()=> go("home");
     const gr = $("#gate-renew",root); if(gr) gr.onclick = ()=>{
       const p = membershipPlan();
-      renewMembership(); toast(`🎉 ${p.name} renewed — welcome back!`); goHomeAfterActivation();
+      renewMembership(); toast(`🎉 ${p.name} renewed — welcome back!`); afterActivation();
     };
     wirePlanButtons(root);
     const cr = $("#gate-crisis",root); if(cr) cr.onclick = openCrisisHelp;
@@ -1477,7 +1561,7 @@ function openMembershipSheet(planId){
     activateMembership(p.id);
     box.close();
     toast(`${p.name} membership active 💚`);
-    goHomeAfterActivation();
+    afterActivation();
   };
 }
 
@@ -1537,6 +1621,7 @@ route("membership", ()=>{
     `}
   </div>`,
   mount(root){
+    gateIntentHash = null;   // browsing packages directly — no feature to return to
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
     const lt = $("#later",root); if(lt) lt.onclick = ()=> go("home");
     const rn = $("#renew",root); if(rn) rn.onclick = ()=>{
@@ -1548,7 +1633,7 @@ route("membership", ()=>{
         <button class="btn" id="yes">Renew now (demo)</button>
         <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`);
       $("#no",box.el).onclick = box.close;
-      $("#yes",box.el).onclick = ()=>{ renewMembership(); box.close(); toast(`🎉 ${p.name} renewed — welcome back!`); goHomeAfterActivation(); };
+      $("#yes",box.el).onclick = ()=>{ renewMembership(); box.close(); toast(`🎉 ${p.name} renewed — welcome back!`); afterActivation(); };
     };
     wirePlanButtons(root);
     const cx = $("[data-act=cancel]",root); if(cx) cx.onclick = ()=>{
@@ -1999,6 +2084,7 @@ route("profile", ()=>{
     <div class="list-row" data-act="feedback" style="margin-top:10px"><div class="lico">💬</div><div class="grow"><b>Send feedback</b><div class="sub">Tell us what's working — and what isn't</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
     ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add Heart2Heart to your home screen</div></div><div class="chev">›</div></div>`:""}
+    ${Backend.enabled()?`<div class="list-row" data-act="password" style="margin-top:10px"><div class="lico">🔑</div><div class="grow"><b>Reset password</b><div class="sub">We'll email you a secure reset link</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="logout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Log out</b><div class="sub">Hide your account on this device</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
@@ -2015,6 +2101,7 @@ route("profile", ()=>{
       $("#ok",box.el).onclick = box.close;
     };
     $("[data-act=feedback]",root).onclick = ()=> go("feedback");
+    const pw = $("[data-act=password]",root); if(pw) pw.onclick = ()=> openPasswordReset("");
     $("[data-act=logout]",root).onclick = ()=>{
       const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🚪</span><h3 class="grow">Log out?</h3></div>
         <p class="muted tiny" style="margin:10px 0 4px">Your account is hidden on this device until you continue again. Nothing is deleted — your profile, matches and messages are kept.</p>
@@ -2149,7 +2236,7 @@ route("wellness", ()=>{
       <button class="tool-card" data-go2="breathing"><div class="tico">🌬️</div><b>Guided breathing</b><div class="sub">Calm in a few breaths</div></button>
       <button class="tool-card" data-go2="gratitude"><div class="tico">🙏</div><b>Gratitude journal</b><div class="sub">${grat.length?grat.length+" entries":"Start today"}</div></button>
       <button class="tool-card" data-go2="checkin"><div class="tico">📝</div><b>Wellness check-in</b><div class="sub">A gentle self-review</div></button>
-      <button class="tool-card" id="prayercard"><div class="tico">${prompt.type==="Prayer"?"✨":"🧘"}</div><b>${prompt.type} prompt</b><div class="sub">Tap for a new one</div></button>
+      <button class="tool-card" id="prayercard"><div class="tico" id="praytico">${prompt.type==="Prayer"?"✨":"🧘"}</div><b id="praylabel">${prompt.type} prompt</b><div class="sub">Tap for a new one</div></button>
     </div>
 
     <div class="sec-h"><h3>Just need to be heard?</h3></div>
@@ -2168,12 +2255,16 @@ route("wellness", ()=>{
       </div>
     </div>
 
-    <div class="sec-h"><h3>${prompt.type} & meditation</h3></div>
+    <div class="sec-h"><h3>Prayer &amp; meditation</h3></div>
     <div class="card" id="promptcard">
       <div class="row" style="gap:10px;align-items:flex-start">
-        <span style="font-size:22px">${prompt.type==="Prayer"?"✨":"🧘"}</span>
-        <div><span class="chip tiny" style="margin-bottom:6px;display:inline-block">${prompt.type}</span>
+        <span style="font-size:22px" id="prompticon">${prompt.type==="Prayer"?"✨":"🧘"}</span>
+        <div class="grow"><span class="chip tiny" id="prompttype" style="margin-bottom:6px;display:inline-block">${prompt.type}</span>
           <p id="prompttext">${esc(prompt.text)}</p></div>
+      </div>
+      <div class="row" style="gap:8px;margin-top:14px">
+        <button class="btn secondary sm" id="promptnext">🔄 Another prompt</button>
+        <button class="btn ghost sm" id="promptfav">🤍 Save</button>
       </div>
     </div>
 
@@ -2204,10 +2295,34 @@ route("wellness", ()=>{
     fav.onclick = ()=>{ const f = well().affFav; const i = f.indexOf(affIdx);
       if(i>=0) f.splice(i,1); else f.push(affIdx); save(); syncFav(); toast(i>=0?"Removed":"Saved to favourites 💚"); };
 
-    // rotating reflection prompt
+    // rotating prayer / meditation prompt — refresh the whole card, not just the text
     let pIdx = dailyIndex(REFLECT_PROMPTS.length);
-    const nextPrompt = ()=>{ pIdx=(pIdx+1)%REFLECT_PROMPTS.length; const p=REFLECT_PROMPTS[pIdx]; $("#prompttext",root).textContent = p.text; };
-    $("#prayercard",root).onclick = nextPrompt;
+    const pFav = (well().promptFav ||= []);
+    const card = $("#promptcard",root), favBtn = $("#promptfav",root);
+    const syncPromptFav = ()=> favBtn.textContent = pFav.includes(pIdx) ? "💚 Saved" : "🤍 Save";
+    const paintPrompt = ()=>{
+      const p = REFLECT_PROMPTS[pIdx], ico = p.type==="Prayer" ? "✨" : "🧘";
+      $("#prompttext",root).textContent = p.text;
+      $("#prompttype",root).textContent = p.type;
+      $("#prompticon",root).textContent = ico;
+      $("#praytico",root).textContent = ico;
+      $("#praylabel",root).textContent = `${p.type} prompt`;
+      syncPromptFav();
+      card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+    };
+    const nextPrompt = ()=>{ pIdx = (pIdx+1) % REFLECT_PROMPTS.length; paintPrompt(); };
+    syncPromptFav();
+    $("#promptnext",root).onclick = nextPrompt;
+    favBtn.onclick = ()=>{
+      const i = pFav.indexOf(pIdx);
+      if(i>=0) pFav.splice(i,1); else pFav.push(pIdx);
+      save(); syncPromptFav(); toast(i>=0 ? "Removed" : "Prompt saved 💚");
+    };
+    // The tool card lives above the prompt — bring it into view so the tap is visible.
+    $("#prayercard",root).onclick = ()=>{
+      nextPrompt();
+      card.scrollIntoView({ behavior:"smooth", block:"center" });
+    };
   }};
 });
 
