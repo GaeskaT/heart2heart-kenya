@@ -13,7 +13,6 @@ const DEFAULT_STATE = {
   readiness:{ answers:{}, scores:{}, overall:0, done:false },
   connections:{},   // candidateId -> {status, messages:[], unread}
   goals:[],
-  learning:{ completed:{} },  // lessonId -> true
   wellness:{ moods:[], gratitude:[], checkins:[], affFav:[] },
   counselling:{ bookings:[], questions:[], webinars:[], groups:[] },
   couple:{ active:false, partnerId:null, since:null, journal:[], goals:[], dates:[], budget:[], checkins:[] },
@@ -28,31 +27,45 @@ const DEFAULT_STATE = {
   tourSeen:false,    // has the first-run onboarding tour been shown/dismissed
 };
 
-/* Membership packages (KES / month, recurring). Anyone can register and browse;
-   using a feature requires an active package, and each package sets monthly limits.
+/* Membership packages (KES, recurring). Anyone can register and browse; using a
+   feature requires an active package. `tier` controls WHICH services unlock:
+   tier 1 (Weekly) = matching & messaging only; tier 2+ (Basic/Premium) = everything.
+   `limits` then caps usage within the unlocked services.
    Prototype — no payment is ever taken. */
 const MEMBERSHIP_PLANS = [
-  { id:"basic", name:"Basic", price:2500, tagline:"Everything you need to get started",
+  { id:"weekly", name:"Weekly", price:300, per:"week", tier:1, tagline:"Try matching, week by week",
+    limits:{ matches:3, counselling:0, webinars:0, groups:0 },
+    features:[
+      "Up to 3 curated matches",
+      "Mutual-consent messaging with your matches",
+      "Renews weekly — cancel anytime",
+      "Other services need Basic or Premium",
+    ] },
+  { id:"basic", name:"Basic", price:2500, per:"month", tier:2, tagline:"Everything you need to get started",
     limits:{ matches:5, counselling:1, webinars:5, groups:1 },
     features:[
       "Up to 5 curated matches",
       "1 free counselling session / month",
       "Up to 5 webinars",
       "1 group membership",
-      "Full Learning Academy & Wellness Tools",
+      "Wellness Tools, Couple Space & Marriage Prep",
     ] },
-  { id:"premium", name:"Premium", price:3500, popular:true, tagline:"Unlimited access",
+  { id:"premium", name:"Premium", price:3500, per:"month", tier:3, popular:true, tagline:"Unlimited access",
     limits:{ matches:Infinity, counselling:2, webinars:Infinity, groups:Infinity },
     features:[
       "Unlimited matches",
       "Unlimited webinars",
       "Unlimited group memberships",
       "2 free counselling sessions / month",
-      "Full Learning Academy & Wellness Tools",
+      "Wellness Tools, Couple Space & Marriage Prep",
     ] },
 ];
 const planById = id => MEMBERSHIP_PLANS.find(p => p.id === id) || null;
 const unlimited = n => n === Infinity;
+
+/* Services available from tier 1 (Weekly). Everything else needs Basic (tier 2+). */
+const TIER1_ROUTES = ["matches","match","messages","chat"];
+const routeMinTier = name => TIER1_ROUTES.includes(name) ? 1 : 2;
 
 let S = load();
 let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
@@ -123,8 +136,6 @@ const TOUR_STEPS = [
     body:"A few thoughtfully chosen people, each with clear reasons you fit. No endless swiping." },
   { sel:'[data-nav=messages]', title:"Messages",
     body:"No anonymous chat — a conversation only opens after both of you express interest." },
-  { sel:'[data-nav=learn]', title:"Learn",
-    body:"The Academy: short courses on communication, healthy love and growing together." },
   { sel:'[data-nav=profile]', title:"You",
     body:"Your wellness score, your journey and settings. You can replay this tour here anytime." },
   { center:true, title:"You're all set 🌿",
@@ -217,29 +228,6 @@ const candidate = id => CANDIDATES.find(c=>c.id===id);
 function conn(id){
   if(!S.connections[id]) S.connections[id] = { status:"none", messages:[], unread:0 };
   return S.connections[id];
-}
-
-/* ---- Learning progress ---- */
-function completedMap(){
-  if(!S.learning) S.learning = { completed:{} };
-  if(!S.learning.completed) S.learning.completed = {};
-  return S.learning.completed;
-}
-const lessonDone = id => !!completedMap()[id];
-function markLesson(id){ completedMap()[id] = true; save(); }
-function courseProgress(course){
-  const done = course.lessons.filter(l => lessonDone(l.id)).length;
-  const total = course.lessons.length;
-  return { done, total, pct: total ? Math.round(done/total*100) : 0 };
-}
-function academyTotals(){
-  let done = 0, total = 0;
-  COURSES.forEach(c=>{ total += c.lessons.length; done += c.lessons.filter(l=>lessonDone(l.id)).length; });
-  return { done, total, pct: total ? Math.round(done/total*100) : 0 };
-}
-/* First not-yet-done lesson across a course, else first lesson */
-function nextLessonOf(course){
-  return course.lessons.find(l => !lessonDone(l.id)) || course.lessons[0];
 }
 
 /* ---- Wellness ---- */
@@ -395,6 +383,7 @@ function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save()
 function membershipState(){ if(!S.membership) S.membership = { plan:null, since:null }; return S.membership; }
 const member = () => !!membershipState().plan;
 function membershipPlan(){ return planById(membershipState().plan); }
+function planTier(){ const p = membershipPlan(); return p ? p.tier : 0; }
 function planLimit(key){ const p = membershipPlan(); return p ? p.limits[key] : 0; }
 function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
 function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
@@ -758,10 +747,11 @@ function render(){
   if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
   if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
 
-  // Membership gate — anyone can register and browse Home/Profile, but using any
-  // feature requires an active membership subscription.
+  // Membership gate — anyone can register and browse Home/Profile. Using a feature
+  // needs a package whose tier covers it (Weekly = matching/messaging only).
   const freeRoutes = ["home","profile","membership"];
-  const gated = S.onboarded && !member() && !freeRoutes.includes(name) && !openRoutes.includes(name);
+  const gated = S.onboarded && !freeRoutes.includes(name) && !openRoutes.includes(name)
+             && planTier() < routeMinTier(name);
 
   const fn = routes[name] || routes.home;
   const screen = $("#screen");
@@ -770,7 +760,7 @@ function render(){
   screen.innerHTML = `<div class="fade-in">${out.html||""}</div>`;
 
   // Tab bar visibility + active state
-  const withNav = ["home","matches","messages","learn","profile"].includes(name);
+  const withNav = ["home","matches","messages","profile"].includes(name);
   const tabbar = $("#tabbar");
   tabbar.hidden = !withNav;
   screen.classList.toggle("has-nav", withNav);
@@ -1158,7 +1148,7 @@ route("result", ()=>{
           <div class="bar"><i style="width:${v}%"></i></div></div>`;
       }).join("")}
     </div>
-    <div class="callout ${band[1]}" style="text-align:left">💡 Tip: your lowest area is a great place to start in the Learning Academy.</div>
+    <div class="callout ${band[1]}" style="text-align:left">💡 Tip: your lowest area is a great place to focus with a counsellor.</div>
     <button class="btn" id="done">Meet your matches</button>
   </div>`,
   mount(root){
@@ -1168,7 +1158,8 @@ route("result", ()=>{
         Backend.setOnboarded(true).catch(e=> console.warn("[Backend] setOnboarded failed", e));
       }
       seedInbound();
-      go("home");
+      // Matching needs a package — land straight on the subscribe screen.
+      go(member() ? "matches" : "membership");
     };
   }};
 });
@@ -1213,7 +1204,7 @@ route("home", ()=>{
       ? `<button class="card center" id="home-membership" style="width:100%;cursor:pointer;border:none">
           <div style="font-size:30px">💞</div>
           <b style="display:block;margin-top:4px">Your matches are ready</b>
-          <p class="tiny faint" style="margin-top:4px">Choose a membership from ${esc(fmtKes(MEMBERSHIP_PLANS[0].price))}/mo to unlock matches and everything else.</p>
+          <p class="tiny faint" style="margin-top:4px">Choose a package from ${esc(fmtKes(MEMBERSHIP_PLANS[0].price))}/${esc(MEMBERSHIP_PLANS[0].per)} to unlock your matches.</p>
           <span class="chip" style="margin-top:10px">See membership →</span>
         </button>`
       : topMatch ? matchCardHTML(topMatch)
@@ -1221,7 +1212,6 @@ route("home", ()=>{
       : `<div class="card center"><p class="tiny faint">No new matches right now — we release them thoughtfully.</p></div>`}
 
     <div class="sec-h"><h3>Keep growing</h3></div>
-    ${(()=>{ const t=academyTotals(); const sub = t.done>0 ? `${t.done}/${t.total} lessons · ${t.pct}% complete` : "Courses on healthy love & communication"; return featureRow("learn","📚","Learning Academy",sub); })()}
     ${(()=>{ const m=moodToday(); const sub = m ? `Today: ${MOODS.find(x=>x.score===m.score)?.emoji} ${MOODS.find(x=>x.score===m.score)?.label} · tap to check in` : "Mood, gratitude, breathing & reflection"; return featureRow("wellness","🧘","Wellness Tools",sub); })()}
     ${(()=>{
       // don't block Home on the network; show the generic sub until it's warm
@@ -1319,7 +1309,6 @@ route("matches", ()=>{
    Anyone can register and browse Home/Profile; using a feature needs a subscription. */
 const FEATURE_LABELS = {
   matches:"Matches", match:"this profile", messages:"Messages", chat:"this conversation",
-  learn:"the Learning Academy", course:"this course", lesson:"this lesson",
   wellness:"Wellness Tools", breathing:"Guided breathing", gratitude:"the Gratitude journal",
   checkin:"the Wellness check-in", listening:"the Listening Centre",
   counselling:"Counsellor Support", book:"session booking", ask:"Ask a question",
@@ -1334,7 +1323,7 @@ function membershipPlansHTML(currentId){
     return `<div class="card plan-card ${p.popular?"popular":""} ${cur?"active":""}" style="margin-bottom:12px;position:relative">
       ${p.popular?`<span class="chip gold" style="position:absolute;top:-9px;right:16px">Most popular</span>`:""}
       <div class="row between"><b style="font-size:17px">${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
-      <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(fmtKes(p.price))}</span><span class="tiny faint">/month</span></div>
+      <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(fmtKes(p.price))}</span><span class="tiny faint">/${esc(p.per)}</span></div>
       <p class="tiny faint">${esc(p.tagline)}</p>
       <div class="stack" style="margin-top:12px">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
       ${cur ? `<button class="btn secondary" disabled style="margin-top:14px">Your current plan</button>`
@@ -1348,13 +1337,20 @@ function wirePlanButtons(root){
 
 function membershipGate(routeName){
   const label = FEATURE_LABELS[routeName] || "this feature";
+  const cur = membershipPlan();
+  // Weekly member reaching a Basic-only service → frame it as an upgrade.
+  const upgrade = !!cur && cur.tier < routeMinTier(routeName);
+  const heading = upgrade ? "Upgrade needed" : "Members only";
+  const intro = upgrade
+    ? `Your <b>${esc(cur.name)}</b> package covers matching and messaging only. <b>${esc(label)}</b> needs Basic or Premium.`
+    : `You're registered and free to explore. To open <b>${esc(label)}</b>, choose a membership package.`;
   return {
   html:`
   <div class="pad">
-    <div class="topbar" style="padding:0 0 4px"><button class="back" data-act="home">←</button><h2 class="grow">Members only</h2></div>
-    <p class="muted tiny">You're registered and free to explore. To open <b>${esc(label)}</b> — and everything else — choose a monthly membership.</p>
+    <div class="topbar" style="padding:0 0 4px"><button class="back" data-act="home">←</button><h2 class="grow">${heading}</h2></div>
+    <p class="muted tiny">${intro}</p>
 
-    <div style="margin-top:16px">${membershipPlansHTML(null)}</div>
+    <div style="margin-top:16px">${membershipPlansHTML(cur ? cur.id : null)}</div>
 
     <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
     <button class="list-row" id="gate-crisis" style="width:100%;text-align:left;margin-top:12px">
@@ -1374,11 +1370,11 @@ function openMembershipSheet(planId){
   const p = planById(planId); if(!p) return;
   const box = sheet(`
     <div class="center"><div style="font-size:38px">💚</div>
-      <h3 style="margin-top:6px">${esc(p.name)} — ${esc(fmtKes(p.price))}/month</h3>
-      <p class="muted tiny" style="margin:8px 0 4px">Recurring monthly. Cancel anytime.</p>
+      <h3 style="margin-top:6px">${esc(p.name)} — ${esc(fmtKes(p.price))}/${esc(p.per)}</h3>
+      <p class="muted tiny" style="margin:8px 0 4px">Recurring ${p.per==="week"?"weekly":"monthly"}. Cancel anytime.</p>
       <div class="stack" style="text-align:left;margin:10px 0">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
       <div class="callout gold" style="text-align:left;margin:4px 0 0">🔒 This is a prototype — no payment method is requested and no money is taken.</div></div>
-    <button class="btn" id="pay" style="margin-top:12px">Subscribe ${esc(fmtKes(p.price))}/mo (demo)</button>
+    <button class="btn" id="pay" style="margin-top:12px">Subscribe ${esc(fmtKes(p.price))}/${esc(p.per)} (demo)</button>
     <button class="btn ghost" id="cancel" style="margin-top:6px">Not now</button>`);
   $("#cancel",box.el).onclick = box.close;
   $("#pay",box.el).onclick = ()=>{
@@ -1422,20 +1418,22 @@ route("membership", ()=>{
     <div class="card" style="text-align:center;margin-top:8px">
       <div style="font-size:40px">💚</div>
       <h3 style="margin-top:6px">${esc(plan.name)} membership · active</h3>
-      <p class="tiny faint" style="margin-top:4px">Active since ${esc(since)} · ${esc(fmtKes(plan.price))}/month, recurring</p>
+      <p class="tiny faint" style="margin-top:4px">Active since ${esc(since)} · ${esc(fmtKes(plan.price))}/${esc(plan.per)}, recurring</p>
     </div>
     <div class="sec-h"><h3>Your plan</h3></div>
     ${membershipPlansHTML(plan.id)}
     <div class="list-row" data-act="cancel" style="margin-top:4px"><div class="lico">⏸️</div><div class="grow"><b>Cancel membership</b><div class="sub">Keep browsing; features lock until you resubscribe</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:16px">Prototype — no payment is ever taken.</p>
     ` : `
-    <p class="muted tiny">You're registered and free to explore. Choose a monthly membership to unlock the features. Every package recurs monthly — cancel anytime.</p>
+    <p class="muted tiny">You're registered and free to explore. Choose a package to unlock the app — Weekly covers matching, Basic and Premium open everything. Cancel anytime.</p>
     <div style="margin-top:16px">${membershipPlansHTML(null)}</div>
     <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
+    <button class="btn ghost" id="later" style="margin-top:10px">Maybe later — explore the app</button>
     `}
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
+    const lt = $("#later",root); if(lt) lt.onclick = ()=> go("home");
     wirePlanButtons(root);
     const cx = $("[data-act=cancel]",root); if(cx) cx.onclick = ()=>{
       const box = sheet(`<h3>Cancel membership?</h3><p class="muted tiny" style="margin:8px 0 14px">You'll keep your profile and can still browse, but features will lock until you resubscribe.</p>
@@ -1830,150 +1828,6 @@ function bubbleHTML(m){
   return `<div class="bubble ${m.from==="me"?"me":"them"}">${esc(m.text)}<div class="t">${t}</div></div>`;
 }
 
-/* ---- Learn / Academy ---- */
-route("learn", ()=>{
-  const t = academyTotals();
-  // "Continue learning": a course that's started but unfinished, else the Start-here course
-  const inProgress = COURSES.find(c=>{ const p=courseProgress(c); return p.done>0 && p.done<p.total; });
-  const resume = inProgress || COURSES[0];
-  const rp = courseProgress(resume);
-  return {
-  html:`
-  <div class="pad">
-    ${BACK_BTN}
-    <h1>Learning Academy</h1>
-    <p class="muted tiny" style="margin-top:4px">Grow the skills healthy relationships are built on.</p>
-
-    <div class="card" style="margin-top:14px">
-      <div class="row between"><b>Your progress</b><span class="chip">${t.done}/${t.total} lessons</span></div>
-      <div class="bar" style="margin-top:10px"><i style="width:${t.pct}%"></i></div>
-    </div>
-
-    <div class="sec-h"><h3>${rp.done>0 ? "Continue learning" : "Start here"}</h3></div>
-    <div class="prompt-card" data-course="${resume.id}" style="cursor:pointer">
-      <div class="kicker">${resume.icon} ${rp.done>0 ? `${rp.done}/${rp.total} complete` : (resume.tag||"New course")}</div>
-      <div class="q">${esc(nextLessonOf(resume).title)}</div>
-      <p class="tiny" style="opacity:.9;margin-top:6px">${esc(resume.title)}</p>
-      <button class="btn secondary sm" style="margin-top:14px;background:rgba(255,255,255,.16);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.4)">${rp.done>0 ? "Resume →" : "Begin →"}</button>
-    </div>
-
-    <div class="sec-h"><h3>All courses</h3></div>
-    ${COURSES.map(c=>{
-      const p = courseProgress(c);
-      const badge = p.pct===100 ? `<span class="chip">✓ Done</span>`
-                  : p.done>0    ? `<span class="chip gold">${p.done}/${p.total}</span>`
-                  : c.tag       ? `<span class="chip coral" style="background:var(--coral-50)">${c.tag}</span>` : "";
-      return `
-      <div class="list-row" data-course="${c.id}">
-        <div class="lico">${c.icon}</div>
-        <div class="grow"><div class="row between" style="gap:8px"><b>${esc(c.title)}</b>${badge}</div>
-          <div class="sub">${c.lessons.length} lessons · ${p.pct}% complete</div>
-          <div class="bar" style="height:5px;margin-top:7px"><i style="width:${p.pct}%"></i></div>
-        </div>
-      </div>`;
-    }).join("")}
-  </div>`,
-  mount(root){
-    $$("[data-course]",root).forEach(el=> el.onclick = ()=> go("course", el.dataset.course));
-  }};
-});
-
-/* ---- Course detail ---- */
-route("course", (id)=>{
-  const c = courseById(id); if(!c) return go("learn");
-  const p = courseProgress(c);
-  return {
-  html:`
-  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Course</h2></div>
-  <div class="pad stack">
-    <div class="row" style="gap:14px">
-      <div class="lico" style="width:58px;height:58px;font-size:30px;border-radius:16px">${c.icon}</div>
-      <div class="grow"><h2>${esc(c.title)}</h2>${c.tag?`<span class="chip coral tiny" style="margin-top:4px;display:inline-block">${c.tag}</span>`:""}</div>
-    </div>
-    <p class="muted">${esc(c.blurb)}</p>
-    <div class="card flat">
-      <div class="row between"><span class="tiny faint">PROGRESS</span><b class="tiny">${p.done}/${p.total} · ${p.pct}%</b></div>
-      <div class="bar" style="margin-top:8px"><i style="width:${p.pct}%"></i></div>
-    </div>
-
-    <div class="sec-h" style="margin-top:8px"><h3>Lessons</h3></div>
-    ${c.lessons.map((l,i)=>{
-      const done = lessonDone(l.id);
-      return `<div class="list-row" data-lesson="${l.id}">
-        <div class="lico" style="background:${done?'var(--teal-700)':'var(--teal-50)'};color:${done?'#fff':'var(--teal-700)'};font-weight:800">${done?'✓':i+1}</div>
-        <div class="grow"><b>${esc(l.title)}</b><div class="sub">${l.minutes} min read${done?' · completed':''}</div></div>
-        <div class="chev">›</div>
-      </div>`;
-    }).join("")}
-
-    <button class="btn" id="startc" style="margin-top:16px">${p.done>0 ? (p.pct===100?"Review from start":"Continue course") : "Start course"}</button>
-  </div>`,
-  mount(root){
-    $("[data-act=back]",root).onclick = ()=> go("learn");
-    $$("[data-lesson]",root).forEach(el=> el.onclick = ()=> go("lesson", `${c.id}~${el.dataset.lesson}`));
-    $("#startc",root).onclick = ()=>{
-      const target = p.pct===100 ? c.lessons[0] : nextLessonOf(c);
-      go("lesson", `${c.id}~${target.id}`);
-    };
-  }};
-});
-
-/* ---- Lesson reader ---- */
-route("lesson", (param="")=>{
-  const [courseId, lessonId] = param.split("~");
-  const ref = lessonRef(courseId, lessonId);
-  if(!ref) return go("learn");
-  const { course, lesson, idx, next } = ref;
-  const done = lessonDone(lesson.id);
-  return {
-  html:`
-  <div class="topbar">
-    <button class="back" data-act="back">←</button>
-    <div class="grow"><div class="tiny faint">${esc(course.title)} · ${idx+1}/${course.lessons.length}</div></div>
-  </div>
-  <div class="pad stack">
-    <div class="steps">${course.lessons.map((_,i)=>`<i class="${i<=idx?'on':''}"></i>`).join("")}</div>
-    <h1 style="margin-top:6px">${esc(lesson.title)}</h1>
-    <p class="tiny faint">${lesson.minutes} min read</p>
-    <p style="font-size:16px;color:var(--ink-soft)">${esc(lesson.intro)}</p>
-
-    ${lesson.sections.map(s=>`
-      <div class="card">
-        ${s.h?`<h3 style="margin-bottom:8px">${esc(s.h)}</h3>`:""}
-        ${(s.p||[]).map(par=>`<p style="margin-bottom:10px">${esc(par)}</p>`).join("")}
-        ${s.list?`<ul style="margin:4px 0 0;padding-left:20px">${s.list.map(li=>`<li style="margin-bottom:7px">${esc(li)}</li>`).join("")}</ul>`:""}
-      </div>`).join("")}
-
-    <div class="card" style="background:var(--teal-50)">
-      <p class="tiny faint" style="margin-bottom:8px;color:var(--teal-900)">KEY TAKEAWAYS</p>
-      <div class="stack">${lesson.takeaways.map(t=>`<div class="reason"><span class="k">✓</span><span>${esc(t)}</span></div>`).join("")}</div>
-    </div>
-
-    ${lesson.reflect?`<div class="prompt-card">
-      <div class="kicker">Reflect</div>
-      <div class="q" style="font-size:17px">${esc(lesson.reflect)}</div>
-      <textarea class="input" id="rfx" placeholder="Write freely — just for you." style="margin-top:12px;min-height:80px;background:rgba(255,255,255,.92)"></textarea>
-    </div>`:""}
-
-    <button class="btn" id="complete">${done ? (next?"Next lesson →":"Back to course") : (next?"Mark complete & continue →":"Mark complete ✓")}</button>
-    ${done?`<p class="center tiny faint">✓ You completed this lesson</p>`:""}
-  </div>`,
-  mount(root){
-    $("[data-act=back]",root).onclick = ()=> go("course", course.id);
-    $("#complete",root).onclick = ()=>{
-      const wasDone = lessonDone(lesson.id);
-      if(!wasDone){ markLesson(lesson.id); updateBadge(); }
-      const cp = courseProgress(course);
-      if(next){ go("lesson", `${course.id}~${next.id}`); }
-      else {
-        if(!wasDone && cp.pct===100) toast(`🎉 Course complete: ${course.title}`);
-        else if(!wasDone) toast("Lesson completed ✓");
-        go("course", course.id);
-      }
-    };
-  }};
-});
-
 /* ---- Profile / You ---- */
 route("profile", ()=>{
   const u = S.user, r = S.readiness;
@@ -2003,7 +1857,7 @@ route("profile", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your journey</h3></div>
-    ${featureRow("membership","💚","Membership", member()?`${membershipPlan().name} · ${fmtKes(membershipPlan().price)}/mo`:`Choose a plan from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/mo`)}
+    ${featureRow("membership","💚","Membership", member()?`${membershipPlan().name} · ${fmtKes(membershipPlan().price)}/${membershipPlan().per}`:`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`)}
     ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
     ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
     ${(()=>{ const n=community().joined.length; const sub = n?`${n} group${n>1?"s":""} joined`:"Moderated groups by life stage"; return featureRow("community","🌍","Community Groups",sub); })()}
@@ -2377,10 +2231,10 @@ route("counselling", ()=>{
     }).join("")}
 
     <div class="sec-h"><h3>Resources</h3></div>
-    ${RESOURCES.map((r,i)=>`
+    ${RESOURCES.map((r,i)=>({r,i})).filter(x=>x.r.kind!=="course").map(({r,i})=>`
       <div class="list-row" data-res="${i}">
         <div class="lico">${r.icon}</div>
-        <div class="grow"><b>${esc(r.title)}</b><div class="sub">${r.kind==="course"?"Academy course":"Read"}</div></div>
+        <div class="grow"><b>${esc(r.title)}</b><div class="sub">Read</div></div>
         <div class="chev">›</div>
       </div>`).join("")}
     <div style="height:8px"></div>
@@ -2389,11 +2243,7 @@ route("counselling", ()=>{
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
     $$("[data-go2]",root).forEach(b=> b.onclick = ()=> go(b.dataset.go2));
     $$("[data-web]",root).forEach(el=> el.onclick = ()=> go("webinars"));
-    $$("[data-res]",root).forEach(el=> el.onclick = ()=>{
-      const r = RESOURCES[+el.dataset.res];
-      if(r.kind==="course") go("course", r.ref);
-      else openResource(r);
-    });
+    $$("[data-res]",root).forEach(el=> el.onclick = ()=> openResource(RESOURCES[+el.dataset.res]));
   }};
 });
 
