@@ -86,14 +86,15 @@ straight on the subscribe screen.
 
 | Package | Price | Matches | Counselling | Webinars | Groups | Other services |
 |---------|-------|---------|-------------|----------|--------|----------------|
-| **Weekly**  | KES 300 / **week**  | up to 3   | —               | —         | —         | ✗ locked |
+| **Weekly**  | KES 300 / **week**  | up to 3 (view-only) | —               | —         | —         | ✗ locked |
 | **Basic**   | KES 2,500 / month   | up to 5   | 1 free session  | up to 5   | 1 group   | ✓ |
 | **Premium** | KES 3,500 / month   | unlimited | 2 free sessions | unlimited | unlimited | ✓ |
 
-**Weekly** is a matching-only tier: it unlocks Matches (max 3) and mutual-consent
-messaging with those matches, and nothing else. Every other service — Wellness
-Tools, Counsellor Support, Couple Space, Marriage Prep, Community and Events —
-needs **Basic or Premium**; a Weekly member hitting one sees an "Upgrade needed"
+**Weekly** is a **view-only** tier: you can browse up to 3 curated matches and
+open their full profiles, but you cannot connect or message — the profile CTA
+becomes *"Upgrade to connect"*. Everything else — Messages, Wellness Tools,
+Counsellor Support, Couple Space, Marriage Prep, Community and Events — needs
+**Basic or Premium**; a Weekly member hitting one sees an "Upgrade needed"
 screen.
 
 A central router gate enforces this by tier, so locked routes can't be reached by
@@ -178,9 +179,9 @@ counsellor accounts and payments are simulated, with no backend.
    **onboarding tour** runs the first time you reach Home (replay it anytime from
    **You → App tour**). Browse freely — Home and Profile show every feature.
 4. You land on the subscribe screen. Choose **Weekly**, **Basic** or **Premium**
-   (simulated — no payment is taken). Weekly unlocks matching only; tap e.g.
-   **Counsellor Support** to see the "Upgrade needed" screen. Switch package or
-   cancel from **You → Membership**.
+   (simulated — no payment is taken). Weekly is view-only — open a match and
+   you'll see *"Upgrade to connect"*; tap **Counsellor Support** for the
+   "Upgrade needed" screen. Switch package or cancel from **You → Membership**.
 5. Open someone and **Express interest** — they'll accept and the chat unlocks.
    Someone will also have expressed interest in *you*.
 6. Chat, then try the **⋯** menu to report/block, or send a rude message to see

@@ -33,11 +33,11 @@ const DEFAULT_STATE = {
    `limits` then caps usage within the unlocked services.
    Prototype — no payment is ever taken. */
 const MEMBERSHIP_PLANS = [
-  { id:"weekly", name:"Weekly", price:300, per:"week", tier:1, tagline:"Try matching, week by week",
+  { id:"weekly", name:"Weekly", price:300, per:"week", tier:1, tagline:"Browse matches, week by week",
     limits:{ matches:3, counselling:0, webinars:0, groups:0 },
     features:[
-      "Up to 3 curated matches",
-      "Mutual-consent messaging with your matches",
+      "View up to 3 curated matches",
+      "View-only — connecting & messaging need Basic",
       "Renews weekly — cancel anytime",
       "Other services need Basic or Premium",
     ] },
@@ -63,9 +63,11 @@ const MEMBERSHIP_PLANS = [
 const planById = id => MEMBERSHIP_PLANS.find(p => p.id === id) || null;
 const unlimited = n => n === Infinity;
 
-/* Services available from tier 1 (Weekly). Everything else needs Basic (tier 2+). */
-const TIER1_ROUTES = ["matches","match","messages","chat"];
+/* Tier 1 (Weekly) is VIEW-ONLY: browse matches and open a profile, nothing more.
+   Connecting, messaging and every other service need Basic (tier 2+). */
+const TIER1_ROUTES = ["matches","match"];
 const routeMinTier = name => TIER1_ROUTES.includes(name) ? 1 : 2;
+const canConnect = () => planTier() >= 2;   // express interest / accept / chat
 
 let S = load();
 let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
@@ -1491,7 +1493,9 @@ route("match", (id)=>{
     </div>`:""}
 
     <div style="width:100%">${connectCTA(id)}</div>
-    <p class="tiny faint">Messaging opens only when you both agree to connect.</p>
+    <p class="tiny faint">${canConnect()
+      ? "Messaging opens only when you both agree to connect."
+      : "Your Weekly package is view-only — upgrade to Basic or Premium to connect and message."}</p>
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("matches");
@@ -1502,6 +1506,9 @@ route("match", (id)=>{
 
 function connectCTA(id){
   const st = statusFor(id);
+  // View-only packages (Weekly) can browse profiles but not connect or message.
+  if(!canConnect() && st!=="blocked")
+    return `<button class="btn" data-cta="upgrade">⭐ Upgrade to connect</button>`;
   if(st==="connected") return `<button class="btn" data-cta="chat">💬 Open conversation</button>`;
   if(st==="you_sent")  return `<button class="btn" disabled>Interest sent — awaiting reply ⏳</button>`;
   if(st==="they_sent") return `<button class="btn coral" data-cta="accept">💌 Accept & connect</button>`;
@@ -1512,6 +1519,8 @@ function wireConnectCTA(root, id){
   const btn = $("[data-cta]",root); if(!btn) return;
   const act = btn.dataset.cta;
   const name = (cardFor(id) || {}).name || "them";
+
+  if(act==="upgrade"){ btn.onclick = ()=> go("membership"); return; }
 
   /* ---- Supabase mode: consent is enforced server-side ---- */
   if(Backend.enabled()){
