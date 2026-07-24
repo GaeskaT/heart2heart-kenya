@@ -90,6 +90,9 @@ const esc = (s="")=>String(s).replace(/[&<>"']/g, m=>(
   {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const initials = n => (n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
 
+/* Reusable "back to previous page/tab" pill (wired globally via [data-goback]). */
+const BACK_BTN = `<button class="navback" data-goback aria-label="Back to previous page">← Back</button>`;
+
 function toast(msg){
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2400);
@@ -787,7 +790,10 @@ window.addEventListener("hashchange", render);
 /* Tab bar navigation */
 document.addEventListener("click", e=>{
   const tab = e.target.closest("[data-nav]");
-  if(tab){ go(tab.dataset.nav); }
+  if(tab){ go(tab.dataset.nav); return; }
+  // Global "back to previous page/tab" control
+  const back = e.target.closest("[data-goback]");
+  if(back){ if(history.length>1) history.back(); else go("home"); }
 });
 
 function updateBadge(){
@@ -1291,6 +1297,7 @@ route("matches", ()=>{
   return {
   html:`
   <div class="pad">
+    ${BACK_BTN}
     <h1>Your matches</h1>
     <p class="muted tiny" style="margin-top:4px">A few carefully chosen people — not an endless feed. Curated on your values, goals and readiness.</p>
 
@@ -1676,6 +1683,7 @@ route("messages", ()=>{
   return {
   html:`
   <div class="pad">
+    ${BACK_BTN}
     <h1>Messages</h1>
     <p class="muted tiny" style="margin-top:4px">No anonymous messaging. Conversations open only after mutual consent.</p>
     ${items.length ? `<div style="margin-top:14px">${items.map(x=>{
@@ -1832,6 +1840,7 @@ route("learn", ()=>{
   return {
   html:`
   <div class="pad">
+    ${BACK_BTN}
     <h1>Learning Academy</h1>
     <p class="muted tiny" style="margin-top:4px">Grow the skills healthy relationships are built on.</p>
 
@@ -1971,6 +1980,7 @@ route("profile", ()=>{
   return {
   html:`
   <div class="pad">
+    ${BACK_BTN}
     <div class="center stack" style="padding-top:8px">
       ${avatar(u.name,u.color,"xl")}
       <div><div class="row" style="justify-content:center;gap:8px"><h2>${esc(u.name)}, ${u.age}</h2><span class="verified">✓ Verified</span></div>
