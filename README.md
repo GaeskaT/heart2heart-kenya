@@ -97,12 +97,30 @@ Counsellor Support, Couple Space, Marriage Prep, Community and Events — needs
 **Basic or Premium**; a Weekly member hitting one sees an "Upgrade needed"
 screen.
 
+Packages **expire**: Weekly after 7 days, Basic/Premium after 30. Once lapsed the
+package grants nothing until renewed, and the member gets **in-app renewal
+reminders with emoji** — a coral banner on Home (⏰ expired / ⌛ ends today /
+⏳ renews in N days), a once-per-session toast, an expiry-aware paywall and a
+one-tap **Renew**. (A front-end prototype sends no email or SMS — reminders are
+in-app only.)
+
 A central router gate enforces this by tier, so locked routes can't be reached by
 deep-linking either. The Membership screen lets you switch package or cancel.
 Usage **limits are enforced** in-app — hitting a cap surfaces an upgrade prompt.
 ("One group membership" spans Support Groups and Community Groups combined.)
 **Prototype — no payment is ever taken.** Crisis and safety helplines stay
 reachable from the paywall, always free.
+
+### Account: log out & feedback
+
+- **Log out** (🚪 in **You → Account**) is a privacy lock: it hides the account on
+  the device until you tap **Continue as …** on the welcome screen. Nothing is
+  deleted — profile, matches and messages are kept (use *Reset demo* to erase).
+  Private routes can't be reached by deep-linking while logged out. In Supabase
+  mode it also calls a real `signOut()`. Note it is **not** password-protected in
+  this prototype.
+- **Send feedback** (💬) — an emoji rating, a topic, and a message, with your
+  previously sent feedback listed underneath. Saved to `localStorage`.
 
 ### Wellness Tools (fully built)
 

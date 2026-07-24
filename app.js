@@ -20,9 +20,11 @@ const DEFAULT_STATE = {
   community:{ joined:[], posts:{} },
   events:{ rsvp:[] },
   premium:{ plan:"free" },
-  membership:{ plan:null, since:null },  // "basic" | "premium" — monthly, gates features per package
+  membership:{ plan:null, since:null },  // "weekly" | "basic" | "premium" — recurs per package
   progress:[],       // match/relationship progress reports for the counselling team
   listening:[],      // Listening Centre callback requests
+  feedback:[],       // in-app feedback the member has sent
+  loggedOut:false,   // privacy lock — hides the account until you continue
   seededInbound:false,
   tourSeen:false,    // has the first-run onboarding tour been shown/dismissed
 };
@@ -383,14 +385,76 @@ function setPlan(id){ if(!S.premium) S.premium = {}; S.premium.plan = id; save()
 
 /* ---- Membership packages (gate features + set monthly limits, simulated) ---- */
 function membershipState(){ if(!S.membership) S.membership = { plan:null, since:null }; return S.membership; }
-const member = () => !!membershipState().plan;
+/* The chosen package, even once it has lapsed (so we can say what expired). */
 function membershipPlan(){ return planById(membershipState().plan); }
-function planTier(){ const p = membershipPlan(); return p ? p.tier : 0; }
-function planLimit(key){ const p = membershipPlan(); return p ? p.limits[key] : 0; }
+
+const DAY_MS = 24*60*60*1000;
+const PERIOD_DAYS = { week:7, month:30 };
+/* When the current period runs out (null if no package). */
+function membershipExpiry(){
+  const p = membershipPlan(), m = membershipState();
+  if(!p || !m.since) return null;
+  return m.since + (PERIOD_DAYS[p.per] || 30) * DAY_MS;
+}
+const membershipExpired = () => { const e = membershipExpiry(); return e !== null && Date.now() > e; };
+/* Whole days until renewal — negative once lapsed. */
+function membershipDaysLeft(){
+  const e = membershipExpiry();
+  return e === null ? null : Math.ceil((e - Date.now()) / DAY_MS);
+}
+/* A lapsed package grants nothing until it's renewed. */
+const member = () => !!membershipState().plan && !membershipExpired();
+function planTier(){ const p = membershipPlan(); return (p && !membershipExpired()) ? p.tier : 0; }
+function planLimit(key){ const p = membershipPlan(); return (p && !membershipExpired()) ? p.limits[key] : 0; }
 function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
+function renewMembership(){ const m = membershipState(); if(m.plan){ m.since = Date.now(); save(); } }
 function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
 // "one group membership" spans both support groups and community groups
 function groupsJoined(){ return couns().groups.length + community().joined.length; }
+
+/* ---- Subscription reminders (in-app; a front-end prototype sends no email/SMS) ----
+   Returns a reminder to show, or null when nothing needs saying. */
+function membershipReminder(){
+  const p = membershipPlan(); if(!p) return null;
+  const left = membershipDaysLeft();
+  if(left === null) return null;
+  if(left < 0){
+    const ago = Math.abs(left);
+    return { kind:"expired", tone:"coral", emoji:"⏰",
+      title:`Your ${p.name} membership has expired`,
+      body:`It lapsed ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}. Renew for ${fmtKes(p.price)}/${p.per} to unlock everything again. 💚`,
+      cta:"Renew now" };
+  }
+  if(left === 0){
+    return { kind:"today", tone:"gold", emoji:"⌛",
+      title:`Your ${p.name} membership ends today`,
+      body:`Renew now so your matches and services stay open. 🙌`, cta:"Renew now" };
+  }
+  if(left <= 3){
+    return { kind:"soon", tone:"gold", emoji:"⏳",
+      title:`Your ${p.name} membership renews in ${left} day${left>1?"s":""}`,
+      body:`Nothing to do — we'll keep everything running. ✨`, cta:"Manage" };
+  }
+  return null;
+}
+/* Nudge once per app session so it reminds without nagging. */
+let reminderToasted = false;
+function maybeToastReminder(){
+  if(reminderToasted) return;
+  const r = membershipReminder();
+  if(r && (r.kind === "expired" || r.kind === "today")){
+    reminderToasted = true;
+    setTimeout(()=> toast(`${r.emoji} ${r.title}`), 700);
+  }
+}
+function reminderCardHTML(){
+  const r = membershipReminder(); if(!r) return "";
+  return `<button class="callout ${r.tone}" id="reminder-cta" style="width:100%;text-align:left;margin-top:12px;border:none;cursor:pointer;align-items:flex-start">
+    <span>${r.emoji}</span>
+    <span><b>${esc(r.title)}</b><br><span class="tiny">${esc(r.body)}</span>
+    <br><span class="chip" style="margin-top:8px;display:inline-block">${esc(r.cta)} →</span></span>
+  </button>`;
+}
 
 /* ---------------- Compatibility matcher ---------------- */
 /* Commitment scale, mirrored in SQL match_score() (migration 0009).
@@ -746,12 +810,16 @@ function render(){
 
   // Onboarding guard
   const openRoutes = ["welcome","login","invite","signup","readiness","conduct","result"];
-  if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
-  if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
+  // Privacy lock — once logged out, nothing personal renders until you continue.
+  if(S.loggedOut){
+    if(!["welcome","login","invite","signup"].includes(name)) return go("welcome");
+  }
+  else if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
+  else if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
 
   // Membership gate — anyone can register and browse Home/Profile. Using a feature
   // needs a package whose tier covers it (Weekly = matching/messaging only).
-  const freeRoutes = ["home","profile","membership"];
+  const freeRoutes = ["home","profile","membership","feedback"];
   const gated = S.onboarded && !freeRoutes.includes(name) && !openRoutes.includes(name)
              && planTier() < routeMinTier(name);
 
@@ -823,14 +891,23 @@ route("welcome", ()=>({
       </div>
     </div>
     <div class="stack">
+      ${(S.loggedOut && S.user) ? `
+      <button class="btn" data-act="resume">Continue as ${esc(S.user.name)} 💚</button>
+      <p class="center tiny" style="opacity:.85">You're logged out on this device. Your account is hidden until you continue.</p>
+      <button class="btn secondary" data-act="begin">Use a different account</button>
+      ` : `
       <button class="btn" data-act="begin">Get started — free to explore</button>
       <p class="center tiny" style="opacity:.85">Open to any adult ready for a healthy relationship. No invitation needed.</p>
+      `}
       ${Backend.enabled()?`<button class="btn ghost" data-act="login" style="color:#fff">Log in</button>`:""}
       ${installPrompt?`<button class="btn ghost" data-act="install" style="color:#fff">📲 Install app</button>`:""}
     </div>
   </div>`,
   mount(root){
     $$("[data-act=begin]", root).forEach(b=> b.onclick = ()=> go("invite"));
+    const rs = $("[data-act=resume]", root); if(rs) rs.onclick = ()=>{
+      S.loggedOut = false; save(); toast(`Welcome back, ${S.user.name} 💚`); go("home");
+    };
     const li = $("[data-act=login]", root); if(li) li.onclick = ()=> go("login");
     const ins = $("[data-act=install]", root); if(ins) ins.onclick = doInstall;
   }
@@ -1191,6 +1268,8 @@ route("home", ()=>{
       <span>💚</span><span>Wellness score <b>${S.readiness.overall}</b> · Stage 2 · <a href="#/profile">view growth</a></span>
     </div>
 
+    ${reminderCardHTML()}
+
     ${inbound ? `<div class="callout coral" style="margin-top:10px">
       <span>💌</span><span><b>${inbound}</b> ${inbound>1?"people have":"person has"} expressed interest in connecting. <a href="#/matches">See who</a></span></div>`:""}
 
@@ -1228,6 +1307,8 @@ route("home", ()=>{
   mount(root){
     $("#reflect",root).onclick = ()=> openReflection(WEEKLY_PROMPTS[new Date().getDay()%WEEKLY_PROMPTS.length]);
     const hm = $("#home-membership",root); if(hm) hm.onclick = ()=> go("membership");
+    const rc = $("#reminder-cta",root); if(rc) rc.onclick = ()=> go("membership");
+    maybeToastReminder();
     wireMatchCards(root);
     wireFeatureRows(root);
   }};
@@ -1340,19 +1421,23 @@ function wirePlanButtons(root){
 function membershipGate(routeName){
   const label = FEATURE_LABELS[routeName] || "this feature";
   const cur = membershipPlan();
-  // Weekly member reaching a Basic-only service → frame it as an upgrade.
-  const upgrade = !!cur && cur.tier < routeMinTier(routeName);
-  const heading = upgrade ? "Upgrade needed" : "Members only";
-  const intro = upgrade
-    ? `Your <b>${esc(cur.name)}</b> package covers matching and messaging only. <b>${esc(label)}</b> needs Basic or Premium.`
+  const expired = membershipExpired();
+  // Lapsed package, Weekly hitting a Basic-only service, or no package at all.
+  const upgrade = !expired && !!cur && cur.tier < routeMinTier(routeName);
+  const heading = expired ? "Membership expired" : upgrade ? "Upgrade needed" : "Members only";
+  const intro = expired
+    ? `⏰ Your <b>${esc(cur.name)}</b> membership expired on ${esc(fmtDate(new Date(membershipExpiry())))}. Renew to open <b>${esc(label)}</b> again — your profile and progress are safe. 💚`
+    : upgrade
+    ? `Your <b>${esc(cur.name)}</b> package is view-only matching. <b>${esc(label)}</b> needs Basic or Premium.`
     : `You're registered and free to explore. To open <b>${esc(label)}</b>, choose a membership package.`;
   return {
   html:`
   <div class="pad">
     <div class="topbar" style="padding:0 0 4px"><button class="back" data-act="home">←</button><h2 class="grow">${heading}</h2></div>
     <p class="muted tiny">${intro}</p>
+    ${expired ? `<button class="btn" id="gate-renew" style="margin-top:14px">⏰ Renew ${esc(cur.name)} — ${esc(fmtKes(cur.price))}/${esc(cur.per)}</button>` : ""}
 
-    <div style="margin-top:16px">${membershipPlansHTML(cur ? cur.id : null)}</div>
+    <div style="margin-top:16px">${membershipPlansHTML((cur && !expired) ? cur.id : null)}</div>
 
     <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
     <button class="list-row" id="gate-crisis" style="width:100%;text-align:left;margin-top:12px">
@@ -1363,6 +1448,10 @@ function membershipGate(routeName){
   </div>`,
   mount(root){
     $("[data-act=home]",root).onclick = ()=> go("home");
+    const gr = $("#gate-renew",root); if(gr) gr.onclick = ()=>{
+      const p = membershipPlan();
+      renewMembership(); toast(`🎉 ${p.name} renewed — welcome back!`); render();
+    };
     wirePlanButtons(root);
     const cr = $("#gate-crisis",root); if(cr) cr.onclick = openCrisisHelp;
   }};
@@ -1412,18 +1501,27 @@ function openUpsell(key){
 route("membership", ()=>{
   const plan = membershipPlan();
   const since = plan ? fmtDate(new Date(membershipState().since || Date.now())) : "";
+  const expired = membershipExpired();
+  const left = membershipDaysLeft();
+  const renewOn = membershipExpiry() ? fmtDate(new Date(membershipExpiry())) : "";
   return {
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Membership</h2></div>
   <div class="pad">
     ${plan ? `
     <div class="card" style="text-align:center;margin-top:8px">
-      <div style="font-size:40px">💚</div>
-      <h3 style="margin-top:6px">${esc(plan.name)} membership · active</h3>
-      <p class="tiny faint" style="margin-top:4px">Active since ${esc(since)} · ${esc(fmtKes(plan.price))}/${esc(plan.per)}, recurring</p>
+      <div style="font-size:40px">${expired ? "⏰" : "💚"}</div>
+      <h3 style="margin-top:6px">${esc(plan.name)} membership · ${expired ? "expired" : "active"}</h3>
+      <p class="tiny faint" style="margin-top:4px">
+        ${expired
+          ? `Expired ${esc(renewOn)} · ${esc(fmtKes(plan.price))}/${esc(plan.per)}`
+          : `Started ${esc(since)} · renews ${esc(renewOn)} (${left} day${left===1?"":"s"} left) · ${esc(fmtKes(plan.price))}/${esc(plan.per)}`}
+      </p>
+      ${expired ? `<button class="btn" id="renew" style="margin-top:14px">⏰ Renew ${esc(plan.name)} — ${esc(fmtKes(plan.price))}/${esc(plan.per)}</button>` : ""}
     </div>
-    <div class="sec-h"><h3>Your plan</h3></div>
-    ${membershipPlansHTML(plan.id)}
+    ${expired ? `<div class="callout coral" style="margin-top:12px;text-align:left">🔒 Your features are locked until you renew. Your profile and progress are safe. 💚</div>` : ""}
+    <div class="sec-h"><h3>${expired ? "Or choose another package" : "Your plan"}</h3></div>
+    ${membershipPlansHTML(expired ? null : plan.id)}
     <div class="list-row" data-act="cancel" style="margin-top:4px"><div class="lico">⏸️</div><div class="grow"><b>Cancel membership</b><div class="sub">Keep browsing; features lock until you resubscribe</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:16px">Prototype — no payment is ever taken.</p>
     ` : `
@@ -1436,6 +1534,17 @@ route("membership", ()=>{
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("home");
     const lt = $("#later",root); if(lt) lt.onclick = ()=> go("home");
+    const rn = $("#renew",root); if(rn) rn.onclick = ()=>{
+      const p = membershipPlan();
+      const box = sheet(`<div class="center"><div style="font-size:38px">⏰</div>
+        <h3 style="margin-top:6px">Renew ${esc(p.name)} — ${esc(fmtKes(p.price))}/${esc(p.per)}</h3>
+        <p class="muted tiny" style="margin:8px 0 4px">Starts a fresh ${p.per}. Everything unlocks again right away. 💚</p>
+        <div class="callout gold" style="text-align:left;margin:12px 0">🔒 Prototype — no payment method is requested and no money is taken.</div></div>
+        <button class="btn" id="yes">Renew now (demo)</button>
+        <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`);
+      $("#no",box.el).onclick = box.close;
+      $("#yes",box.el).onclick = ()=>{ renewMembership(); box.close(); toast(`🎉 ${p.name} renewed — welcome back!`); render(); };
+    };
     wirePlanButtons(root);
     const cx = $("[data-act=cancel]",root); if(cx) cx.onclick = ()=>{
       const box = sheet(`<h3>Cancel membership?</h3><p class="muted tiny" style="margin:8px 0 14px">You'll keep your profile and can still browse, but features will lock until you resubscribe.</p>
@@ -1866,7 +1975,12 @@ route("profile", ()=>{
     </div>
 
     <div class="sec-h"><h3>Your journey</h3></div>
-    ${featureRow("membership","💚","Membership", member()?`${membershipPlan().name} · ${fmtKes(membershipPlan().price)}/${membershipPlan().per}`:`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`)}
+    ${(()=>{
+      const p = membershipPlan();
+      if(p && membershipExpired()) return featureRow("membership","⏰","Membership",`${p.name} expired — tap to renew`);
+      if(p) return featureRow("membership","💚","Membership",`${p.name} · ${fmtKes(p.price)}/${p.per} · renews in ${membershipDaysLeft()}d`);
+      return featureRow("membership","💚","Membership",`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`);
+    })()}
     ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
     ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
     ${(()=>{ const n=community().joined.length; const sub = n?`${n} group${n>1?"s":""} joined`:"Moderated groups by life stage"; return featureRow("community","🌍","Community Groups",sub); })()}
@@ -1877,9 +1991,10 @@ route("profile", ()=>{
     <div class="sec-h"><h3>Account</h3></div>
     <div class="list-row" data-act="edit"><div class="lico">✏️</div><div class="grow"><b>Edit profile & preferences</b></div><div class="chev">›</div></div>
     <div class="list-row" data-act="tour" style="margin-top:10px"><div class="lico">🧭</div><div class="grow"><b>App tour</b><div class="sub">Replay the quick intro walkthrough</div></div><div class="chev">›</div></div>
+    <div class="list-row" data-act="feedback" style="margin-top:10px"><div class="lico">💬</div><div class="grow"><b>Send feedback</b><div class="sub">Tell us what's working — and what isn't</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
     ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add Heart2Heart to your home screen</div></div><div class="chev">›</div></div>`:""}
-    ${Backend.enabled()?`<div class="list-row" data-act="signout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Sign out</b><div class="sub">End your session on this device</div></div><div class="chev">›</div></div>`:""}
+    <div class="list-row" data-act="logout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Log out</b><div class="sub">Hide your account on this device</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
   </div>`,
@@ -1894,15 +2009,91 @@ route("profile", ()=>{
         <button class="btn" id="ok" style="margin-top:12px">Got it</button>`);
       $("#ok",box.el).onclick = box.close;
     };
-    const so = $("[data-act=signout]",root); if(so) so.onclick = async ()=>{
-      try{ await Backend.signOut(); }catch(e){}
-      rdIndex=0; reset(); toast("Signed out");
+    $("[data-act=feedback]",root).onclick = ()=> go("feedback");
+    $("[data-act=logout]",root).onclick = ()=>{
+      const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🚪</span><h3 class="grow">Log out?</h3></div>
+        <p class="muted tiny" style="margin:10px 0 4px">Your account is hidden on this device until you continue again. Nothing is deleted — your profile, matches and messages are kept.</p>
+        <p class="tiny faint" style="margin:0 0 14px">Tip: use <b>Reset demo</b> if you want to erase everything instead.</p>
+        <button class="btn danger" id="yes">Log out</button>
+        <button class="btn ghost" id="no" style="margin-top:6px">Stay signed in</button>`);
+      $("#no",box.el).onclick = box.close;
+      $("#yes",box.el).onclick = async ()=>{
+        if(Backend.enabled()){ try{ await Backend.signOut(); }catch(e){} resetRemote(); }
+        S.loggedOut = true; save();
+        box.close(); toast("Logged out 🚪"); go("welcome");
+      };
     };
     $("[data-act=reset]",root).onclick = ()=>{
       const box = sheet(`<h3>Reset demo?</h3><p class="muted tiny" style="margin:8px 0 14px">This clears your profile, matches and messages on this device.</p>
         <button class="btn danger" id="yes">Yes, reset everything</button><button class="btn ghost" id="no" style="margin-top:6px">Cancel</button>`);
       $("#no",box.el).onclick = box.close;
       $("#yes",box.el).onclick = ()=>{ box.close(); rdIndex=0; reset(); };
+    };
+  }};
+});
+
+/* ============================== Feedback ============================== */
+function feedbackList(){ if(!Array.isArray(S.feedback)) S.feedback = []; return S.feedback; }
+function addFeedback(entry){ feedbackList().unshift({ ts:Date.now(), ...entry }); save(); }
+
+const FEEDBACK_RATINGS = [
+  { n:1, emoji:"😞", label:"Poor" },
+  { n:2, emoji:"😕", label:"Meh" },
+  { n:3, emoji:"🙂", label:"Okay" },
+  { n:4, emoji:"😊", label:"Good" },
+  { n:5, emoji:"🤩", label:"Great" },
+];
+const FEEDBACK_TOPICS = ["App experience","Matches quality","Counsellor support","Membership & pricing","Safety concern","Bug report","Something else"];
+let fbDraft = { rating:0, topic:FEEDBACK_TOPICS[0] };
+
+route("feedback", ()=>{
+  const sent = feedbackList();
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Send feedback</h2></div>
+  <div class="pad stack">
+    <p class="muted tiny">Your feedback shapes Heart2Heart. Tell us what's helping and what's getting in the way — we read every message. 💚</p>
+
+    <div class="card">
+      <b>How is Heart2Heart working for you?</b>
+      <div class="mood-row" id="fbrate">
+        ${FEEDBACK_RATINGS.map(r=>`<button class="mood-btn ${fbDraft.rating===r.n?"on":""}" data-rate="${r.n}">
+          <span class="e">${r.emoji}</span><span class="l">${r.label}</span></button>`).join("")}
+      </div>
+    </div>
+
+    <label class="field"><span>What's this about?</span>
+      <select class="input" id="fbtopic">${FEEDBACK_TOPICS.map(t=>`<option ${fbDraft.topic===t?"selected":""}>${esc(t)}</option>`).join("")}</select></label>
+
+    <label class="field"><span>Your message</span>
+      <textarea class="input" id="fbtext" placeholder="Share as much or as little as you like…" style="min-height:120px"></textarea></label>
+
+    <button class="btn" id="fbsend">Send feedback</button>
+    <p class="center tiny faint">Prototype — feedback is saved on this device only. For urgent safety concerns, use the 🆘 support options in Wellness Tools.</p>
+
+    ${sent.length ? `<div class="sec-h"><h3>You've sent</h3></div>
+      ${sent.map(f=>{
+        const r = FEEDBACK_RATINGS.find(x=>x.n===f.rating);
+        return `<div class="card" style="margin-bottom:10px">
+          <div class="row between"><b class="tiny">${r?r.emoji+" "+esc(r.label):"Feedback"} · ${esc(f.topic||"")}</b>
+            <span class="tiny faint">${fmtDate(new Date(f.ts))}</span></div>
+          ${f.text?`<p class="tiny muted" style="margin-top:6px">${esc(f.text)}</p>`:""}
+          <div class="chip" style="margin-top:8px">✓ Received — thank you</div>
+        </div>`;
+      }).join("")}` : ""}
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("profile");
+    $$("[data-rate]",root).forEach(b=> b.onclick = ()=>{ fbDraft.rating = +b.dataset.rate; render(); });
+    $("#fbtopic",root).onchange = e => fbDraft.topic = e.target.value;
+    $("#fbsend",root).onclick = ()=>{
+      const text = $("#fbtext",root).value.trim();
+      if(!fbDraft.rating){ toast("Pick a rating first 🙂"); return; }
+      if(text.length < 3){ toast("Add a short message"); return; }
+      addFeedback({ rating:fbDraft.rating, topic:$("#fbtopic",root).value, text });
+      fbDraft = { rating:0, topic:FEEDBACK_TOPICS[0] };
+      toast("Thank you — feedback sent 💚");
+      render();
     };
   }};
 });
