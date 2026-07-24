@@ -147,6 +147,12 @@ textarea.input{ resize:vertical; min-height:84px; }
 .topbar .back:active{ background:var(--teal-50); }
 .topbar h2{ flex:1; }
 
+/* Standalone "back to previous page/tab" pill on top-level tab screens */
+.navback{ display:inline-flex; align-items:center; gap:5px; font-size:13.5px; font-weight:600;
+  color:var(--teal-700); background:var(--teal-50); padding:7px 13px 7px 11px; border-radius:99px;
+  margin-bottom:12px; transition:transform .08s, filter .15s; }
+.navback:active{ transform:translateY(1px) scale(.98); filter:brightness(.97); }
+
 /* ---------- Welcome / gradient hero ---------- */
 .hero{
   min-height:100vh; display:flex; flex-direction:column; justify-content:space-between;
