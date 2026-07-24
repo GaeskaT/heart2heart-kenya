@@ -119,6 +119,11 @@ reachable from the paywall, always free.
   Private routes can't be reached by deep-linking while logged out. In Supabase
   mode it also calls a real `signOut()`. Note it is **not** password-protected in
   this prototype.
+- **Reset password** (🔑) — from the login screen (*Forgot your password?*) or
+  **You → Account**. In Supabase mode this emails a recovery link that opens
+  `#/reset`, where a new password is set via `updateUser()`. With no backend
+  configured the app has no passwords at all, and says so plainly instead of
+  pretending to send mail.
 - **Send feedback** (💬) — an emoji rating, a topic, and a message, with your
   previously sent feedback listed underneath. Saved to `localStorage`.
 
