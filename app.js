@@ -81,7 +81,7 @@ window.addEventListener("beforeinstallprompt", (e) => {
   installPrompt = e;
   if(typeof render === "function") render();   // surface the Install button
 });
-window.addEventListener("appinstalled", () => { installPrompt = null; toast("App installed 🧡"); });
+window.addEventListener("appinstalled", () => { installPrompt = null; toast("App installed 💚"); });
 async function doInstall(){
   if(!installPrompt) return;
   installPrompt.prompt();
@@ -132,7 +132,7 @@ function sheet(html){
    Auto-runs once after onboarding; replayable from Profile. */
 let tourActive = false;
 const TOUR_STEPS = [
-  { center:true, title:"Welcome to Heart2Heart 🧡",
+  { center:true, title:"Welcome to Heart2Heart 💚",
     body:"A calm, counsellor-guided space for building a healthy relationship. Here's a 20-second tour of how it works." },
   { sel:'[data-nav=home]', title:"Home",
     body:"Your daily check-in — a weekly reflection, your top match, and quick links to your tools." },
@@ -226,7 +226,7 @@ function startTour(){
 }
 
 const avatar = (name,color,cls="") =>
-  `<div class="avatar ${cls}" style="background:${color||'#c15840'}">${esc(initials(name))}</div>`;
+  `<div class="avatar ${cls}" style="background:${color||'#0f6f6a'}">${esc(initials(name))}</div>`;
 
 const candidate = id => CANDIDATES.find(c=>c.id===id);
 function conn(id){
@@ -437,7 +437,7 @@ function membershipReminder(){
     const ago = Math.abs(left);
     return { kind:"expired", tone:"coral", emoji:"⏰",
       title:`Your ${p.name} membership has expired`,
-      body:`It lapsed ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}. Renew for ${fmtKes(p.price)}/${p.per} to unlock everything again. 🧡`,
+      body:`It lapsed ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}. Renew for ${fmtKes(p.price)}/${p.per} to unlock everything again. 💚`,
       cta:"Renew now" };
   }
   if(left === 0){
@@ -587,7 +587,7 @@ function resetCounsellingCache(){
 function cardFromRow(r){
   return {
     id:r.id, name:r.full_name || "Member", age:r.age, county:r.county,
-    color:r.avatar_color || "#c15840", career:r.career, verified:!!r.verified,
+    color:r.avatar_color || "#0f6f6a", career:r.career, verified:!!r.verified,
     values:r.values || [], intention:r.intention, bio:r.bio, faith:r.faith,
     education:r.education, familyGoal:r.family_goal,
   };
@@ -632,7 +632,7 @@ async function loadCounselling(){
     Backend.listQuestions(),
   ]);
   remote.counsellors = counsellors.map(c => ({
-    ...c, name: c.full_name || "Counsellor", color: c.avatar_color || "#c15840",
+    ...c, name: c.full_name || "Counsellor", color: c.avatar_color || "#0f6f6a",
   }));
   remote.bookings = bookings;
   remote.questions = questions;
@@ -793,7 +793,7 @@ function ensureMessages(userId){
 
 const loadingScreen = (title) => ({
   html:`<div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">${title}</h2></div>
-        <div class="empty"><div class="ico">🧡</div><p>Loading…</p></div>`,
+        <div class="empty"><div class="ico">💚</div><p>Loading…</p></div>`,
   mount(root){ const b = $("[data-act=back]",root); if(b) b.onclick = ()=> history.length>1 ? history.back() : go("home"); }
 });
 const errorScreen = (title, msg, retry) => ({
@@ -906,7 +906,7 @@ route("welcome", ()=>({
     </div>
     <div class="stack">
       ${(S.loggedOut && S.user) ? `
-      <button class="btn" data-act="resume">Continue as ${esc(S.user.name)} 🧡</button>
+      <button class="btn" data-act="resume">Continue as ${esc(S.user.name)} 💚</button>
       <p class="center tiny" style="opacity:.85">You're logged out on this device. Your account is hidden until you continue.</p>
       <button class="btn secondary" data-act="begin">Use a different account</button>
       ` : `
@@ -920,7 +920,7 @@ route("welcome", ()=>({
   mount(root){
     $$("[data-act=begin]", root).forEach(b=> b.onclick = ()=> go("invite"));
     const rs = $("[data-act=resume]", root); if(rs) rs.onclick = ()=>{
-      S.loggedOut = false; save(); toast(`Welcome back, ${S.user.name} 🧡`); go("home");
+      S.loggedOut = false; save(); toast(`Welcome back, ${S.user.name} 💚`); go("home");
     };
     const li = $("[data-act=login]", root); if(li) li.onclick = ()=> go("login");
     const ins = $("[data-act=install]", root); if(ins) ins.onclick = doInstall;
@@ -951,7 +951,7 @@ route("login", ()=>({
         resetRemote();                      // never show the previous session's data
         const prof = await Backend.getProfile();
         if(prof){ S.user = Backend.fromRow(prof); S.onboarded = !!prof.onboarded; save(); }
-        toast("Welcome back 🧡");
+        toast("Welcome back 💚");
         go(S.onboarded ? "home" : "invite");
       }catch(e){
         toast(e.message || "Login failed"); btn.disabled = false; btn.textContent = "Log in";
@@ -1036,7 +1036,7 @@ route("invite", ()=>({
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Getting started</h2></div>
   <div class="pad stack">
-    <div class="callout teal">🧡 Heart2Heart is open to any adult who's emotionally ready to build a healthy, intentional relationship. No invitation needed — just register to explore. Counselling is offered and encouraged throughout.</div>
+    <div class="callout teal">💚 Heart2Heart is open to any adult who's emotionally ready to build a healthy, intentional relationship. No invitation needed — just register to explore. Counselling is offered and encouraged throughout.</div>
     <div class="card flat stack">
       <p class="tiny muted">Please confirm the following to continue:</p>
       ${[
@@ -1054,13 +1054,13 @@ route("invite", ()=>({
     const boxes = $$(".elig",root);
     const check = ()=>{ verify.disabled = !boxes.every(b=>b.checked); };
     boxes.forEach(b=> b.onchange = check);
-    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to Heart2Heart 🧡"); go("signup"); };
+    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to Heart2Heart 💚"); go("signup"); };
   }
 }));
 
 /* ---- Signup / profile ---- */
 route("signup", ()=>{
-  const u = S.user || { values:[], color:"#c15840" };
+  const u = S.user || { values:[], color:"#0f6f6a" };
   return {
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Your profile</h2></div>
@@ -1146,7 +1146,7 @@ route("signup", ()=>{
         intention:g("intention").value, familyGoal:g("familyGoal").value, values,
         ageMin:+g("ageMin").value||18, ageMax:+g("ageMax").value||99,
         bio:g("bio").value.trim(),
-        color:"#c15840", initials:initials(name),
+        color:"#0f6f6a", initials:initials(name),
       };
 
       if(Backend.enabled() && S.onboarded){
@@ -1352,7 +1352,7 @@ route("home", ()=>{
     </div>
 
     <div class="callout teal" style="margin-top:8px">
-      <span>🧡</span><span>Wellness score <b>${S.readiness.overall}</b> · Stage 2 · <a href="#/profile">view growth</a></span>
+      <span>💚</span><span>Wellness score <b>${S.readiness.overall}</b> · Stage 2 · <a href="#/profile">view growth</a></span>
     </div>
 
     ${reminderCardHTML()}
@@ -1513,7 +1513,7 @@ function membershipGate(routeName){
   const upgrade = !expired && !!cur && cur.tier < routeMinTier(routeName);
   const heading = expired ? "Membership expired" : upgrade ? "Upgrade needed" : "Members only";
   const intro = expired
-    ? `⏰ Your <b>${esc(cur.name)}</b> membership expired on ${esc(fmtDate(new Date(membershipExpiry())))}. Renew to open <b>${esc(label)}</b> again — your profile and progress are safe. 🧡`
+    ? `⏰ Your <b>${esc(cur.name)}</b> membership expired on ${esc(fmtDate(new Date(membershipExpiry())))}. Renew to open <b>${esc(label)}</b> again — your profile and progress are safe. 💚`
     : upgrade
     ? `Your <b>${esc(cur.name)}</b> package is view-only matching. <b>${esc(label)}</b> needs Basic or Premium.`
     : `You're registered and free to explore. To open <b>${esc(label)}</b>, choose a membership package.`;
@@ -1548,7 +1548,7 @@ function membershipGate(routeName){
 function openMembershipSheet(planId){
   const p = planById(planId); if(!p) return;
   const box = sheet(`
-    <div class="center"><div style="font-size:38px">🧡</div>
+    <div class="center"><div style="font-size:38px">💚</div>
       <h3 style="margin-top:6px">${esc(p.name)} — ${esc(fmtKes(p.price))}/${esc(p.per)}</h3>
       <p class="muted tiny" style="margin:8px 0 4px">Recurring ${p.per==="week"?"weekly":"monthly"}. Cancel anytime.</p>
       <div class="stack" style="text-align:left;margin:10px 0">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
@@ -1559,7 +1559,7 @@ function openMembershipSheet(planId){
   $("#pay",box.el).onclick = ()=>{
     activateMembership(p.id);
     box.close();
-    toast(`${p.name} membership active 🧡`);
+    toast(`${p.name} membership active 💚`);
     afterActivation();
   };
 }
@@ -1598,7 +1598,7 @@ route("membership", ()=>{
   <div class="pad">
     ${plan ? `
     <div class="card" style="text-align:center;margin-top:8px">
-      <div style="font-size:40px">${expired ? "⏰" : "🧡"}</div>
+      <div style="font-size:40px">${expired ? "⏰" : "💚"}</div>
       <h3 style="margin-top:6px">${esc(plan.name)} membership · ${expired ? "expired" : "active"}</h3>
       <p class="tiny faint" style="margin-top:4px">
         ${expired
@@ -1607,7 +1607,7 @@ route("membership", ()=>{
       </p>
       ${expired ? `<button class="btn" id="renew" style="margin-top:14px">⏰ Renew ${esc(plan.name)} — ${esc(fmtKes(plan.price))}/${esc(plan.per)}</button>` : ""}
     </div>
-    ${expired ? `<div class="callout coral" style="margin-top:12px;text-align:left">🔒 Your features are locked until you renew. Your profile and progress are safe. 🧡</div>` : ""}
+    ${expired ? `<div class="callout coral" style="margin-top:12px;text-align:left">🔒 Your features are locked until you renew. Your profile and progress are safe. 💚</div>` : ""}
     <div class="sec-h"><h3>${expired ? "Or choose another package" : "Your plan"}</h3></div>
     ${membershipPlansHTML(expired ? null : plan.id)}
     <div class="list-row" data-act="cancel" style="margin-top:4px"><div class="lico">⏸️</div><div class="grow"><b>Cancel membership</b><div class="sub">Keep browsing; features lock until you resubscribe</div></div><div class="chev">›</div></div>
@@ -1627,7 +1627,7 @@ route("membership", ()=>{
       const p = membershipPlan();
       const box = sheet(`<div class="center"><div style="font-size:38px">⏰</div>
         <h3 style="margin-top:6px">Renew ${esc(p.name)} — ${esc(fmtKes(p.price))}/${esc(p.per)}</h3>
-        <p class="muted tiny" style="margin:8px 0 4px">Starts a fresh ${p.per}. Everything unlocks again right away. 🧡</p>
+        <p class="muted tiny" style="margin:8px 0 4px">Starts a fresh ${p.per}. Everything unlocks again right away. 💚</p>
         <div class="callout gold" style="text-align:left;margin:12px 0">🔒 Prototype — no payment method is requested and no money is taken.</div></div>
         <button class="btn" id="yes">Renew now (demo)</button>
         <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`);
@@ -1711,7 +1711,7 @@ function connectCTA(id){
   if(st==="you_sent")  return `<button class="btn" disabled>Interest sent — awaiting reply ⏳</button>`;
   if(st==="they_sent") return `<button class="btn coral" data-cta="accept">💌 Accept & connect</button>`;
   if(st==="blocked")   return `<button class="btn danger" data-cta="unblock">Unblock</button>`;
-  return `<button class="btn" data-cta="express">🧡 Express interest</button>`;
+  return `<button class="btn" data-cta="express">💚 Express interest</button>`;
 }
 function wireConnectCTA(root, id){
   const btn = $("[data-cta]",root); if(!btn) return;
@@ -1837,7 +1837,7 @@ function looksLikeCrisis(t){ return /\b(kill myself|end it all|suicide|want to d
 function openCrisisHelp(){
   const R = CRISIS_RESOURCES;
   const box = sheet(`
-    <div class="row" style="gap:10px"><span style="font-size:24px">🧡</span><h3 class="grow">You're not alone</h3></div>
+    <div class="row" style="gap:10px"><span style="font-size:24px">💚</span><h3 class="grow">You're not alone</h3></div>
     <div class="callout coral" style="text-align:left;margin:10px 0">⚠️ ${esc(R.boundary)}</div>
     <div class="stack">
       ${R.lines.map(l=>`<div class="list-row" style="cursor:${l.tel?'pointer':'default'}" ${l.tel?`data-tel="${esc(l.tel)}"`:""}>
@@ -1876,7 +1876,7 @@ function openProgress(id){
     (S.progress ||= []).push({ ts:Date.now(), with:id, stage:s.v, label:s.t, note:$("#pnote",box.el).value.trim() });
     save();
     box.close();
-    toast(s.v==="support" ? "Thank you — a counsellor will reach out." : "Update shared with your counselling team 🧡");
+    toast(s.v==="support" ? "Thank you — a counsellor will reach out." : "Update shared with your counselling team 💚");
   };
 }
 
@@ -2067,8 +2067,8 @@ route("profile", ()=>{
     ${(()=>{
       const p = membershipPlan();
       if(p && membershipExpired()) return featureRow("membership","⏰","Membership",`${p.name} expired — tap to renew`);
-      if(p) return featureRow("membership","🧡","Membership",`${p.name} · ${fmtKes(p.price)}/${p.per} · renews in ${membershipDaysLeft()}d`);
-      return featureRow("membership","🧡","Membership",`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`);
+      if(p) return featureRow("membership","💚","Membership",`${p.name} · ${fmtKes(p.price)}/${p.per} · renews in ${membershipDaysLeft()}d`);
+      return featureRow("membership","💚","Membership",`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`);
     })()}
     ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
     ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
@@ -2143,7 +2143,7 @@ route("feedback", ()=>{
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Send feedback</h2></div>
   <div class="pad stack">
-    <p class="muted tiny">Your feedback shapes Heart2Heart. Tell us what's helping and what's getting in the way — we read every message. 🧡</p>
+    <p class="muted tiny">Your feedback shapes Heart2Heart. Tell us what's helping and what's getting in the way — we read every message. 💚</p>
 
     <div class="card">
       <b>How is Heart2Heart working for you?</b>
@@ -2183,7 +2183,7 @@ route("feedback", ()=>{
       if(text.length < 3){ toast("Add a short message"); return; }
       addFeedback({ rating:fbDraft.rating, topic:$("#fbtopic",root).value, text });
       fbDraft = { rating:0, topic:FEEDBACK_TOPICS[0] };
-      toast("Thank you — feedback sent 🧡");
+      toast("Thank you — feedback sent 💚");
       render();
     };
   }};
@@ -2279,7 +2279,7 @@ route("wellness", ()=>{
     // mood logging
     $$("#moodrow .mood-btn",root).forEach(b=> b.onclick = ()=>{
       logMood(+b.dataset.score);
-      toast("Mood logged 🧡");
+      toast("Mood logged 💚");
       render();  // refresh trend, streak, note field
     });
     const note = $("#moodnote",root);
@@ -2288,17 +2288,17 @@ route("wellness", ()=>{
     // affirmation
     let affIdx = dailyIndex(AFFIRMATIONS.length);
     const fav = $("#afffav",root);
-    const syncFav = ()=> fav.textContent = well().affFav.includes(affIdx) ? "🧡" : "🤍";
+    const syncFav = ()=> fav.textContent = well().affFav.includes(affIdx) ? "💚" : "🤍";
     syncFav();
     $("#affnext",root).onclick = ()=>{ affIdx = (affIdx+1)%AFFIRMATIONS.length; $("#afftext",root).textContent = `"${AFFIRMATIONS[affIdx]}"`; syncFav(); };
     fav.onclick = ()=>{ const f = well().affFav; const i = f.indexOf(affIdx);
-      if(i>=0) f.splice(i,1); else f.push(affIdx); save(); syncFav(); toast(i>=0?"Removed":"Saved to favourites 🧡"); };
+      if(i>=0) f.splice(i,1); else f.push(affIdx); save(); syncFav(); toast(i>=0?"Removed":"Saved to favourites 💚"); };
 
     // rotating prayer / meditation prompt — refresh the whole card, not just the text
     let pIdx = dailyIndex(REFLECT_PROMPTS.length);
     const pFav = (well().promptFav ||= []);
     const card = $("#promptcard",root), favBtn = $("#promptfav",root);
-    const syncPromptFav = ()=> favBtn.textContent = pFav.includes(pIdx) ? "🧡 Saved" : "🤍 Save";
+    const syncPromptFav = ()=> favBtn.textContent = pFav.includes(pIdx) ? "💚 Saved" : "🤍 Save";
     const paintPrompt = ()=>{
       const p = REFLECT_PROMPTS[pIdx], ico = p.type==="Prayer" ? "✨" : "🧘";
       $("#prompttext",root).textContent = p.text;
@@ -2315,7 +2315,7 @@ route("wellness", ()=>{
     favBtn.onclick = ()=>{
       const i = pFav.indexOf(pIdx);
       if(i>=0) pFav.splice(i,1); else pFav.push(pIdx);
-      save(); syncPromptFav(); toast(i>=0 ? "Removed" : "Prompt saved 🧡");
+      save(); syncPromptFav(); toast(i>=0 ? "Removed" : "Prompt saved 💚");
     };
     // The tool card lives above the prompt — bring it into view so the tap is visible.
     $("#prayercard",root).onclick = ()=>{
@@ -2422,7 +2422,7 @@ route("gratitude", ()=>{
     $("#gadd",root).onclick = ()=>{
       const t = $("#gtext",root).value.trim();
       if(t.length<2){ toast("Write a little something first 🙂"); return; }
-      addGratitude(t); toast("Added to your journal 🧡"); render();
+      addGratitude(t); toast("Added to your journal 💚"); render();
     };
   }};
 });
@@ -2772,7 +2772,7 @@ route("ask", ()=>{
           // ask_question() also runs the crisis-safety detector server-side
           await Backend.askQuestion(t);
           remote.questions = null;              // refetch so it appears
-          toast("Sent confidentially 🧡");
+          toast("Sent confidentially 💚");
           render();
           if(looksLikeCrisis(t)) openCrisisHelp();
         }catch(e){
@@ -2782,7 +2782,7 @@ route("ask", ()=>{
       }
 
       const q = addQuestion(t);
-      toast("Sent confidentially 🧡");
+      toast("Sent confidentially 💚");
       render();
       if(looksLikeCrisis(t)) openCrisisHelp();
       // simulated acknowledgement from the counselling team
@@ -2809,13 +2809,13 @@ route("listening", ()=>{
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Listening Centre</h2></div>
   <div class="pad">
-    <div class="card" style="background:linear-gradient(135deg,#d76f52,#7d3524);color:#fff">
+    <div class="card" style="background:linear-gradient(135deg,#12857f,#0a4b47);color:#fff">
       <div style="font-size:30px">👂</div>
       <b style="display:block;margin-top:6px;font-size:16px">Sometimes you just need to be heard</b>
       <p class="tiny" style="opacity:.92;margin-top:6px">Request a call and a trained listener will simply listen — no advice, no counselling, no judgement. Just space to say it out loud.</p>
     </div>
 
-    <div class="callout teal" style="margin-top:12px">🧡 This is a listening ear, not counselling. If you'd like professional guidance instead, <a href="#/counselling">Counsellor Support</a> is there for you.</div>
+    <div class="callout teal" style="margin-top:12px">💚 This is a listening ear, not counselling. If you'd like professional guidance instead, <a href="#/counselling">Counsellor Support</a> is there for you.</div>
     <button class="callout coral" data-crisis style="width:100%;text-align:left;margin-top:8px;border:none;cursor:pointer"><span>🆘</span><span>In crisis or unsafe right now? <b>Get help now →</b></span></button>
 
     <div class="card" style="margin-top:12px">
@@ -2857,14 +2857,14 @@ route("listening", ()=>{
         try{
           await Backend.requestListening(phone, note, time);
           remote.listening = null;               // refetch
-          toast("Request sent — a listener will call you 🧡");
+          toast("Request sent — a listener will call you 💚");
           render();
         }catch(e){ toast(e.message || "Could not send"); btn.disabled=false; btn.textContent="Request a listening call"; }
         return;
       }
       (S.listening ||= []).unshift({ id:"l"+Date.now(), phone, note, time, status:"open", ts:Date.now() });
       save();
-      toast("Request sent — a listener will call you 🧡");
+      toast("Request sent — a listener will call you 💚");
       render();
     };
     $$("[data-cancel-listen]",root).forEach(b=> b.onclick = async ()=>{
@@ -2979,10 +2979,10 @@ route("couple", ()=>{
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Couple Space</h2>
     <button class="back" data-act="settings">⋯</button></div>
   <div class="pad">
-    <div class="card" style="background:linear-gradient(135deg,#d76f52,#7d3524);color:#fff">
+    <div class="card" style="background:linear-gradient(135deg,#12857f,#0a4b47);color:#fff">
       <div class="row" style="gap:6px;justify-content:center">
         ${avatar(S.user.name,S.user.color,"lg")}
-        <span style="font-size:22px;align-self:center">🧡</span>
+        <span style="font-size:22px;align-self:center">💚</span>
         ${avatar(p?.name,p?.color,"lg")}
       </div>
       <div class="center" style="margin-top:12px">
@@ -3056,9 +3056,9 @@ function coupleGate(){
 function beginCouple(partnerId){
   commitCouple(partnerId);
   const p = candidate(partnerId);
-  cpl().journal.push({ from:"partner", text:`I'm so glad we're building this together, ${S.user.name}. Here's to us 🧡`, ts:Date.now() });
+  cpl().journal.push({ from:"partner", text:`I'm so glad we're building this together, ${S.user.name}. Here's to us 💚`, ts:Date.now() });
   save();
-  toast(`Couple Space opened with ${p?.name} 🧡`);
+  toast(`Couple Space opened with ${p?.name} 💚`);
   go("couple");
 }
 function anniversaryNote(c){
@@ -3095,7 +3095,7 @@ route("couple-journal", ()=>{
   mount(root){
     $("[data-act=back]",root).onclick = ()=> go("couple");
     $("#jadd",root).onclick = ()=>{ const t=$("#jtext",root).value.trim(); if(t.length<2){toast("Write something first");return;}
-      c.journal.push({from:"me",text:t,ts:Date.now()}); save(); toast("Added 🧡"); render(); };
+      c.journal.push({from:"me",text:t,ts:Date.now()}); save(); toast("Added 💚"); render(); };
   }};
 });
 
@@ -3145,7 +3145,7 @@ route("couple-dates", ()=>{
     $("[data-act=back]",root).onclick = ()=> go("couple");
     $$("[data-idea]",root).forEach(b=> b.onclick = ()=>{ $("#dtext",root).value = DATE_IDEAS[+b.dataset.idea]; });
     $("#dadd",root).onclick = ()=>{ const t=$("#dtext",root).value.trim(); if(t.length<2){toast("Add a date idea first");return;}
-      c.dates.push({text:t,done:false}); save(); toast("Date planned 🧡"); render(); };
+      c.dates.push({text:t,done:false}); save(); toast("Date planned 💚"); render(); };
     $$("[data-done]",root).forEach(b=> b.onclick = ()=>{ const i=+b.dataset.done; c.dates[i].done=!c.dates[i].done; save(); render(); });
     $$("[data-del]",root).forEach(b=> b.onclick = ()=>{ c.dates.splice(+b.dataset.del,1); save(); render(); });
   }};
@@ -3219,7 +3219,7 @@ route("couple-checkin", ()=>{
       $$(".likert",root).forEach(row=>{ const on=row.querySelector("button.on"); if(!on) missing=true; else answers[row.dataset.q]=+on.dataset.v; });
       if(missing){ toast("Please answer each question"); return; }
       c.checkins.push({ ts:Date.now(), answers, note:$("#cnote",root).value.trim() }); save();
-      toast("Check-in saved 🧡"); go("couple");
+      toast("Check-in saved 💚"); go("couple");
     };
   }};
 });
