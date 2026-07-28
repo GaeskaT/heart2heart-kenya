@@ -4,17 +4,16 @@
    ============================================================ */
 
 :root {
-  /* Brand — warm coral/terracotta, drawn from the twin-hearts logo.
-     (Token names kept as --teal-* so the whole design system re-themes at once.) */
-  --teal-900:#7d3524; --teal-700:#c15840; --teal-600:#d76f52; --teal-50:#f8ebe4;
+  /* Brand — calm teal (primary), with coral & gold accents. */
+  --teal-900:#0a4b47; --teal-700:#0f6f6a; --teal-600:#12857f; --teal-50:#e7f4f2;
   --coral-600:#e2674f; --coral-500:#ef7d63; --coral-50:#fdeee9;
-  --gold-500:#c8862a; --gold-50:#fbf1df;
+  --gold-500:#e0a44b; --gold-50:#fbf1df;
   --plum-600:#6b4a72;
 
-  /* Neutrals — warmed to sit under the coral brand */
-  --ink:#3a2a25; --ink-soft:#6a5751; --ink-faint:#9b8880;
-  --line:#efe3dc; --card:#ffffff;
-  --bg:#f9f3ef; --bg-warm:#fbf6f1;
+  /* Neutrals */
+  --ink:#1f2a2a; --ink-soft:#4a5a58; --ink-faint:#7f908d;
+  --line:#e4ecea; --card:#ffffff;
+  --bg:#f4f7f5; --bg-warm:#faf7f2;
 
   /* Feedback */
   --ok:#2e9e6b; --warn:#c9911f; --danger:#cc4b3c;
@@ -32,7 +31,7 @@
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { margin:0; height:100%; }
 body {
-  font-family:var(--font); color:var(--ink); background:#e6ddd6;
+  font-family:var(--font); color:var(--ink); background:#dfe6e3;
   line-height:1.5; -webkit-font-smoothing:antialiased;
 }
 button { font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
@@ -158,7 +157,7 @@ textarea.input{ resize:vertical; min-height:84px; }
 .hero{
   min-height:100vh; display:flex; flex-direction:column; justify-content:space-between;
   padding:40px 26px 30px; color:#fff;
-  background:radial-gradient(120% 80% at 20% 0%, #e07a5f 0%, #c15840 44%, #7d3524 100%);
+  background:radial-gradient(120% 80% at 20% 0%, #12857f 0%, #0f6f6a 42%, #0a4b47 100%);
 }
 .hero .brandmark{ font-size:46px; }
 .hero .hero-logo{
@@ -242,7 +241,7 @@ textarea.input{ resize:vertical; min-height:84px; }
 .list-row .sub{ font-size:12.5px; color:var(--ink-faint); }
 
 /* ---------- Prompt / exercise card ---------- */
-.prompt-card{ background:linear-gradient(135deg,#d76f52,#7d3524); color:#fff; border-radius:var(--radius-lg); padding:22px; }
+.prompt-card{ background:linear-gradient(135deg,#12857f,#0a4b47); color:#fff; border-radius:var(--radius-lg); padding:22px; }
 .prompt-card .kicker{ font-size:12px; letter-spacing:.8px; text-transform:uppercase; opacity:.8; font-weight:700; }
 .prompt-card .q{ font-size:19px; font-weight:600; margin-top:8px; line-height:1.35; }
 
@@ -333,7 +332,7 @@ textarea.input{ resize:vertical; min-height:84px; }
 /* ---------- Mood 7-day trend ---------- */
 .trend{ display:flex; align-items:flex-end; gap:6px; height:88px; margin-top:6px; }
 .trend .col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; height:100%; justify-content:flex-end; }
-.trend .stalk{ width:60%; max-width:20px; border-radius:6px 6px 3px 3px; background:linear-gradient(180deg,var(--teal-500,#e8875f),var(--teal-700));
+.trend .stalk{ width:60%; max-width:20px; border-radius:6px 6px 3px 3px; background:linear-gradient(180deg,var(--teal-500,#12857f),var(--teal-700));
   min-height:4px; transition:height .4s; }
 .trend .stalk.empty{ background:var(--line); }
 .trend .day{ font-size:10px; color:var(--ink-faint); }
@@ -341,7 +340,7 @@ textarea.input{ resize:vertical; min-height:84px; }
 /* ---------- Guided breathing ---------- */
 .breathe-stage{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:space-between;
   padding:28px 24px 40px; color:#fff; text-align:center;
-  background:radial-gradient(120% 90% at 50% 20%, #e07a5f 0%, #c15840 45%, #7d3524 100%); }
+  background:radial-gradient(120% 90% at 50% 20%, #12857f 0%, #0f6f6a 45%, #0a4b47 100%); }
 .breathe-orb-wrap{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; width:100%; }
 .breathe-orb{ width:150px; height:150px; border-radius:50%; display:grid; place-items:center;
   background:radial-gradient(circle at 40% 35%, rgba(255,255,255,.55), rgba(255,255,255,.14));
