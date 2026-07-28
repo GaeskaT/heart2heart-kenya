@@ -22,8 +22,10 @@ phone width. Auto-updates on every push to `main`. Reset anytime from
 **Installable (PWA):** open the link on your phone and use *Add to Home Screen*
 (or the in-app **Install app** button on Chrome/Android) to run it full-screen
 like a native app. It works offline once loaded, via a service worker
-(`sw.js`) + web manifest. Icons are generated dependency-free by
-`tools/build-icons.mjs`.
+(`sw.js`) + web manifest. The favicon, app and maskable icons are generated
+from the master logo (`tools/build-icons.py`, needs Pillow); the full lockup
+lives at `icons/logo.png` and is shown on the welcome screen. The legacy
+dependency-free generator (`tools/build-icons.mjs`) is superseded.
 
 ## Run it locally
 
