@@ -6,7 +6,7 @@
    straight to the network — never cached — so live data is always fresh and
    auth is never served stale.
    ============================================================================ */
-const CACHE = "h2h-v9";
+const CACHE = "h2h-v10";
 
 // Relative to the SW's scope, so this works under the GitHub Pages subpath too.
 const SHELL = [
@@ -19,6 +19,7 @@ const SHELL = [
   "./app.js",
   "./manifest.webmanifest",
   "./icons/logo.png",
+  "./icons/logo-hearts.png",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
