@@ -1,5 +1,5 @@
 /* ============================================================
-   Heart2Heart Kenya — Backend abstraction (Supabase, Phase 0)
+   HeartWise Connections — Backend abstraction (Supabase, Phase 0)
    ------------------------------------------------------------
    Progressive enhancement: if supabase-config.js has a url +
    anonKey, this connects to Supabase Auth + the Phase 0 tables.

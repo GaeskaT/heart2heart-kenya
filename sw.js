@@ -1,12 +1,12 @@
 /* ============================================================================
-   Heart2Heart Kenya — service worker.
+   HeartWise Connections — service worker.
 
    Makes the app installable and usable offline. Bump CACHE on a release to
    evict old assets. Cross-origin requests (Supabase auth/API/CDN) are passed
    straight to the network — never cached — so live data is always fresh and
    auth is never served stale.
    ============================================================================ */
-const CACHE = "h2h-v11";
+const CACHE = "h2h-v12";
 
 // Relative to the SW's scope, so this works under the GitHub Pages subpath too.
 const SHELL = [
@@ -18,8 +18,7 @@ const SHELL = [
   "./backend.js",
   "./app.js",
   "./manifest.webmanifest",
-  "./icons/logo.png",
-  "./icons/logo-hearts.png",
+  "./icons/logo-hero.png",
   "./icons/favicon-64.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
