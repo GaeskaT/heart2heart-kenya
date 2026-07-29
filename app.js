@@ -893,7 +893,8 @@ route("welcome", ()=>({
   html:`
   <div class="hero">
     <div>
-      <img class="hero-logo" src="icons/logo.png" alt="Heart2Heart Kenya" width="1024" height="1024" />
+      <img class="hero-logo" src="icons/logo-hearts.png" alt="" width="790" height="790" />
+      <h1>Heart2Heart<br>Kenya</h1>
       <p class="tag">Healing first. Healthy relationships next.</p>
       <div class="valuelist stack">
         ${[
