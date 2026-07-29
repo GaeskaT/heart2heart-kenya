@@ -1,5 +1,5 @@
 /* ============================================================
-   Heart2Heart Kenya — seed data
+   HeartWise Connections — seed data
    Static reference data + candidate pool for matching.
    ============================================================ */
 
@@ -84,9 +84,9 @@ const CODE_OF_CONDUCT = [
 /* ---- Crisis resources (member-facing) ----
    ⚠️  VERIFY every number with the counselling team before launch, and add the
    service's own crisis / on-call line. See docs/crisis-safety-protocol.md.
-   Heart2Heart is NOT an emergency service — that boundary must stay explicit. */
+   HeartWise Connections is NOT an emergency service — that boundary must stay explicit. */
 const CRISIS_RESOURCES = {
-  boundary: "Heart2Heart is not an emergency service. If you or someone else is in immediate danger, please contact emergency services now.",
+  boundary: "HeartWise Connections is not an emergency service. If you or someone else is in immediate danger, please contact emergency services now.",
   lines: [
     { label:"Emergency — police / ambulance", value:"999 or 112", tel:"999", urgent:true },
     { label:"Kenya Red Cross support line", value:"1199", tel:"1199" },
@@ -100,7 +100,7 @@ const CRISIS_RESOURCES = {
 const DATA_PROTECTION = {
   title: "How we protect your data",
   body: [
-    "Your privacy matters — especially here. Heart2Heart processes your personal data only to run the service: verifying members, finding compatible matches, and supporting your counselling journey.",
+    "Your privacy matters — especially here. HeartWise Connections processes your personal data only to run the service: verifying members, finding compatible matches, and supporting your counselling journey.",
     "We handle sensitive information (your readiness, wellness and counselling records) with extra care: it is encrypted, access-controlled, and never sold or used to profile you for advertising.",
     "You have rights under the Kenya Data Protection Act, 2019 — to access, correct, delete or export your data, and to withdraw consent. Contact our team to exercise them.",
     "Counselling notes are confidential and kept per professional and legal guidance. You choose what you share with other members.",
@@ -269,7 +269,7 @@ const RESOURCES = [
   { title:"When to seek professional help", kind:"info", icon:"💛",
     body:"Consider booking a session if you feel persistently low, anxious or stuck; if past hurt keeps affecting your relationships; or simply if you'd value a steady, professional space to think. You don't need to be in crisis to deserve support." },
   { title:"How we protect your data", kind:"info", icon:"🔒",
-    body:"Heart2Heart processes your data only to run the service, and handles sensitive information (readiness, wellness and counselling records) with extra care — encrypted, access-controlled, never sold. Under the Kenya Data Protection Act, 2019 you can access, correct, delete or export your data and withdraw consent anytime. Counselling notes stay confidential." },
+    body:"HeartWise Connections processes your data only to run the service, and handles sensitive information (readiness, wellness and counselling records) with extra care — encrypted, access-controlled, never sold. Under the Kenya Data Protection Act, 2019 you can access, correct, delete or export your data and withdraw consent anytime. Counselling notes stay confidential." },
 ];
 
 /* ---- Couple Space content ---- */

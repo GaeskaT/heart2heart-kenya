@@ -1,13 +1,13 @@
 {
-  "name": "Heart2Heart Kenya",
-  "short_name": "Heart2Heart",
+  "name": "HeartWise Connections",
+  "short_name": "HeartWise",
   "description": "A counsellor-guided relationship app for healthy dating and marriage. Healing first. Healthy relationships next.",
   "id": "./",
   "start_url": ".",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a4b47",
+  "background_color": "#0a0a0a",
   "theme_color": "#0f6f6a",
   "categories": ["health", "lifestyle", "social"],
   "icons": [

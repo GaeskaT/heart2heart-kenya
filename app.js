@@ -1,5 +1,5 @@
 /* ============================================================
-   Heart2Heart Kenya — app engine (vanilla SPA)
+   HeartWise Connections — app engine (vanilla SPA)
    Hash router · localStorage state · compatibility matcher
    ============================================================ */
 "use strict";
@@ -35,7 +35,7 @@ const DEFAULT_STATE = {
    `limits` then caps usage within the unlocked services.
    Prototype — no payment is ever taken. */
 const MEMBERSHIP_PLANS = [
-  { id:"weekly", name:"Weekly", price:300, per:"week", tier:1, tagline:"Browse matches, week by week",
+  { id:"weekly", name:"Weekly", price:200, per:"week", tier:1, tagline:"Browse matches, week by week",
     limits:{ matches:3, counselling:0, webinars:0, groups:0 },
     features:[
       "View up to 3 curated matches",
@@ -132,7 +132,7 @@ function sheet(html){
    Auto-runs once after onboarding; replayable from Profile. */
 let tourActive = false;
 const TOUR_STEPS = [
-  { center:true, title:"Welcome to Heart2Heart 💚",
+  { center:true, title:"Welcome to HeartWise Connections 💚",
     body:"A calm, counsellor-guided space for building a healthy relationship. Here's a 20-second tour of how it works." },
   { sel:'[data-nav=home]', title:"Home",
     body:"Your daily check-in — a weekly reflection, your top match, and quick links to your tools." },
@@ -893,8 +893,7 @@ route("welcome", ()=>({
   html:`
   <div class="hero">
     <div>
-      <img class="hero-logo" src="icons/logo-hearts.png" alt="" width="790" height="790" />
-      <h1>Heart2Heart<br>Kenya</h1>
+      <img class="hero-logo" src="icons/logo-hero.png" alt="HeartWise Connections" width="710" height="432" />
       <p class="tag">Healing first. Healthy relationships next.</p>
       <div class="valuelist stack">
         ${[
@@ -933,7 +932,7 @@ route("login", ()=>({
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Welcome back</h2></div>
   <div class="pad stack">
-    <p class="muted tiny">Log in to your Heart2Heart account.</p>
+    <p class="muted tiny">Log in to your HeartWise Connections account.</p>
     <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
     <label class="field"><span>Password</span><input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password"></label>
     <button class="btn" id="login">Log in</button>
@@ -968,7 +967,7 @@ function openPasswordReset(prefill){
   if(!Backend.enabled()){
     const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">🔑</span><h3 class="grow">No password to reset</h3></div>
       <p class="muted tiny" style="margin:10px 0 4px">This demo runs entirely on your device and never asks for a password, so there's nothing to reset.</p>
-      <p class="tiny faint" style="margin:0 0 14px">Once Heart2Heart is connected to its live backend, this is where you'd receive a reset link by email.</p>
+      <p class="tiny faint" style="margin:0 0 14px">Once HeartWise Connections is connected to its live backend, this is where you'd receive a reset link by email.</p>
       <button class="btn" id="ok">Got it</button>`);
     $("#ok",box.el).onclick = box.close;
     return;
@@ -1002,14 +1001,14 @@ route("reset", ()=>({
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Choose a new password</h2></div>
   <div class="pad stack">
     ${Backend.enabled() ? `
-    <p class="muted tiny">Enter a new password for your Heart2Heart account. Use at least 6 characters.</p>
+    <p class="muted tiny">Enter a new password for your HeartWise Connections account. Use at least 6 characters.</p>
     <label class="field"><span>New password</span><input class="input" id="pw1" type="password" autocomplete="new-password" placeholder="New password"></label>
     <label class="field"><span>Confirm new password</span><input class="input" id="pw2" type="password" autocomplete="new-password" placeholder="Repeat it"></label>
     <button class="btn" id="save">Save new password</button>
     <p class="center tiny faint">Open this page from the link in your reset email, so we know it's you.</p>
     ` : `
     <div class="callout gold">🔑 This demo has no accounts or passwords — there's nothing to reset here.</div>
-    <button class="btn" id="home">Back to Heart2Heart</button>
+    <button class="btn" id="home">Back to HeartWise Connections</button>
     `}
   </div>`,
   mount(root){
@@ -1037,7 +1036,7 @@ route("invite", ()=>({
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2>Getting started</h2></div>
   <div class="pad stack">
-    <div class="callout teal">💚 Heart2Heart is open to any adult who's emotionally ready to build a healthy, intentional relationship. No invitation needed — just register to explore. Counselling is offered and encouraged throughout.</div>
+    <div class="callout teal">💚 HeartWise Connections is open to any adult who's emotionally ready to build a healthy, intentional relationship. No invitation needed — just register to explore. Counselling is offered and encouraged throughout.</div>
     <div class="card flat stack">
       <p class="tiny muted">Please confirm the following to continue:</p>
       ${[
@@ -1055,7 +1054,7 @@ route("invite", ()=>({
     const boxes = $$(".elig",root);
     const check = ()=>{ verify.disabled = !boxes.every(b=>b.checked); };
     boxes.forEach(b=> b.onchange = check);
-    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to Heart2Heart 💚"); go("signup"); };
+    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to HeartWise Connections 💚"); go("signup"); };
   }
 }));
 
@@ -2083,11 +2082,11 @@ route("profile", ()=>{
     <div class="list-row" data-act="tour" style="margin-top:10px"><div class="lico">🧭</div><div class="grow"><b>App tour</b><div class="sub">Replay the quick intro walkthrough</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="feedback" style="margin-top:10px"><div class="lico">💬</div><div class="grow"><b>Send feedback</b><div class="sub">Tell us what's working — and what isn't</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
-    ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add Heart2Heart to your home screen</div></div><div class="chev">›</div></div>`:""}
+    ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add HeartWise Connections to your home screen</div></div><div class="chev">›</div></div>`:""}
     ${Backend.enabled()?`<div class="list-row" data-act="password" style="margin-top:10px"><div class="lico">🔑</div><div class="grow"><b>Reset password</b><div class="sub">We'll email you a secure reset link</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="logout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Log out</b><div class="sub">Hide your account on this device</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="reset" style="margin-top:10px"><div class="lico">🔄</div><div class="grow"><b>Reset demo</b><div class="sub">Clear all data and start over</div></div><div class="chev">›</div></div>
-    <p class="center tiny faint" style="margin-top:20px">Heart2Heart Kenya · Healing first. Healthy relationships next.</p>
+    <p class="center tiny faint" style="margin-top:20px">HeartWise Connections · Healing first. Healthy relationships next.</p>
   </div>`,
   mount(root){
     wireFeatureRows(root);
@@ -2144,10 +2143,10 @@ route("feedback", ()=>{
   html:`
   <div class="topbar"><button class="back" data-act="back">←</button><h2 class="grow">Send feedback</h2></div>
   <div class="pad stack">
-    <p class="muted tiny">Your feedback shapes Heart2Heart. Tell us what's helping and what's getting in the way — we read every message. 💚</p>
+    <p class="muted tiny">Your feedback shapes HeartWise Connections. Tell us what's helping and what's getting in the way — we read every message. 💚</p>
 
     <div class="card">
-      <b>How is Heart2Heart working for you?</b>
+      <b>How is HeartWise Connections working for you?</b>
       <div class="mood-row" id="fbrate">
         ${FEEDBACK_RATINGS.map(r=>`<button class="mood-btn ${fbDraft.rating===r.n?"on":""}" data-rate="${r.n}">
           <span class="e">${r.emoji}</span><span class="l">${r.label}</span></button>`).join("")}

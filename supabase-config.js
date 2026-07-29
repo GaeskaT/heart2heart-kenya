@@ -1,5 +1,5 @@
 /* ============================================================
-   Heart2Heart Kenya — Supabase configuration
+   HeartWise Connections — Supabase configuration
    ------------------------------------------------------------
    Paste your project's URL and PUBLIC anon key below to switch
    the app from local-only mode to real Supabase Auth + database.
