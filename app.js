@@ -1261,6 +1261,14 @@ function computeReadiness(){
   save();
 }
 
+/* Reusable Terms & liability sheet. */
+function openTerms(){
+  const box = sheet(`<div class="row" style="gap:10px"><span style="font-size:24px">⚖️</span><h3 class="grow">${esc(DISCLAIMER.title)}</h3></div>
+    <div class="stack" style="margin:12px 0 4px">${DISCLAIMER.body.map(p=>`<p class="tiny muted">${esc(p)}</p>`).join("")}</div>
+    <button class="btn" id="ok" style="margin-top:12px">Got it</button>`);
+  $("#ok",box.el).onclick = box.close;
+}
+
 /* ---- Code of conduct ---- */
 route("conduct", ()=>({
   html:`
@@ -1272,12 +1280,21 @@ route("conduct", ()=>({
         <input type="checkbox" class="cc" data-i="${i}" style="margin-top:3px">
         <span style="font-size:14px">${c}</span></label>`).join("")}
     </div>
+
+    <div class="callout gold" style="text-align:left;align-items:flex-start">⚖️ <span>${esc(DISCLAIMER.short)} <a href="#" id="read-terms">Read the full terms →</a></span></div>
+    <label class="card flat row" style="align-items:flex-start">
+      <input type="checkbox" id="acceptTerms" style="margin-top:3px">
+      <span style="font-size:14px">I understand HeartWise Connections is not liable for members' actions, and I accept sole responsibility for my own actions and interactions.</span>
+    </label>
+
     <button class="btn" id="agree" disabled>I agree — continue</button>
   </div>`,
   mount(root){
-    const boxes = $$(".cc",root), btn = $("#agree",root);
-    const check = ()=> btn.disabled = !boxes.every(b=>b.checked);
+    const boxes = $$(".cc",root), terms = $("#acceptTerms",root), btn = $("#agree",root);
+    const check = ()=> btn.disabled = !(boxes.every(b=>b.checked) && terms.checked);
     boxes.forEach(b=> b.onchange = check);
+    terms.onchange = check;
+    $("#read-terms",root).onclick = (e)=>{ e.preventDefault(); openTerms(); };
     btn.onclick = ()=>{
       S.conductAgreed = true; save();
       if(Backend.enabled()){
@@ -2082,6 +2099,7 @@ route("profile", ()=>{
     <div class="list-row" data-act="tour" style="margin-top:10px"><div class="lico">🧭</div><div class="grow"><b>App tour</b><div class="sub">Replay the quick intro walkthrough</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="feedback" style="margin-top:10px"><div class="lico">💬</div><div class="grow"><b>Send feedback</b><div class="sub">Tell us what's working — and what isn't</div></div><div class="chev">›</div></div>
     <div class="list-row" data-act="dataprotection" style="margin-top:10px"><div class="lico">🔒</div><div class="grow"><b>Data protection & privacy</b><div class="sub">How we handle your data · your rights</div></div><div class="chev">›</div></div>
+    <div class="list-row" data-act="terms" style="margin-top:10px"><div class="lico">⚖️</div><div class="grow"><b>Terms & liability</b><div class="sub">Your responsibilities · our disclaimer</div></div><div class="chev">›</div></div>
     ${installPrompt?`<div class="list-row" data-act="install" style="margin-top:10px"><div class="lico">📲</div><div class="grow"><b>Install app</b><div class="sub">Add HeartWise Connections to your home screen</div></div><div class="chev">›</div></div>`:""}
     ${Backend.enabled()?`<div class="list-row" data-act="password" style="margin-top:10px"><div class="lico">🔑</div><div class="grow"><b>Reset password</b><div class="sub">We'll email you a secure reset link</div></div><div class="chev">›</div></div>`:""}
     <div class="list-row" data-act="logout" style="margin-top:10px"><div class="lico">🚪</div><div class="grow"><b>Log out</b><div class="sub">Hide your account on this device</div></div><div class="chev">›</div></div>
@@ -2099,6 +2117,7 @@ route("profile", ()=>{
         <button class="btn" id="ok" style="margin-top:12px">Got it</button>`);
       $("#ok",box.el).onclick = box.close;
     };
+    $("[data-act=terms]",root).onclick = openTerms;
     $("[data-act=feedback]",root).onclick = ()=> go("feedback");
     const pw = $("[data-act=password]",root); if(pw) pw.onclick = ()=> openPasswordReset("");
     $("[data-act=logout]",root).onclick = ()=>{

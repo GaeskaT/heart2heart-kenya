@@ -96,6 +96,19 @@ const CRISIS_RESOURCES = {
   note: "You matter, and reaching out is a sign of strength. If you can, please also tell someone you trust. A listener or counsellor here is ready for you too.",
 };
 
+/* Liability disclaimer — members are responsible for their own interactions. */
+const DISCLAIMER = {
+  title: "Terms & liability",
+  short: "HeartWise Connections helps members connect, but is not a party to any interaction between them. We are not liable for the acts, commissions or omissions of any member or third party. Each user is solely responsible for their own actions and decisions.",
+  body: [
+    "HeartWise Connections provides a platform that helps members find and connect with one another. We facilitate introductions and support your journey, but we are not a party to any conversation, arrangement, meeting or relationship between members.",
+    "To the fullest extent permitted by law, HeartWise Connections is not responsible or liable for any acts, commissions or omissions of any member or third party arising from their use of, or interactions through, the app — whether online or in person.",
+    "Each user bears full responsibility for their own actions, decisions and communications, and for exercising their own judgement and reasonable care when interacting with others. Verification and moderation reduce risk but cannot guarantee any member's identity, intentions or conduct.",
+    "Please take sensible safety precautions: meet in a public place, tell someone you trust, and never send money or share financial or highly sensitive information. If you ever feel unsafe, use the report and block tools, or the crisis resources in Wellness Tools.",
+    "Nothing in this notice excludes or limits any liability that cannot be excluded under the laws of Kenya.",
+  ],
+};
+
 /* Data protection notice (Kenya Data Protection Act, 2019) */
 const DATA_PROTECTION = {
   title: "How we protect your data",
