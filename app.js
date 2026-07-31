@@ -68,6 +68,29 @@ const MEMBERSHIP_PLANS = [
 const planById = id => MEMBERSHIP_PLANS.find(p => p.id === id) || null;
 const unlimited = n => n === Infinity;
 
+/* Faceted gemstone icons (original animated SVG — no external GIFs, offline-safe).
+   Each plan's colour: sapphire (blue), ruby (red), emerald (green). */
+const GEMS = {
+  sapphire: { light:"#8fc0ff", mid:"#2f6fe0", dark:"#183f8f" },
+  ruby:     { light:"#ff9a9a", mid:"#e0324a", dark:"#8f1522" },
+  emerald:  { light:"#84e9b4", mid:"#17a866", dark:"#0b6142" },
+};
+function gemIcon(id, size=22){
+  const c = GEMS[id]; if(!c) return "";
+  const g = "grad-"+id;
+  return `<svg class="gem" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${c.light}"/><stop offset=".55" stop-color="${c.mid}"/><stop offset="1" stop-color="${c.dark}"/>
+    </linearGradient></defs>
+    <polygon points="4,9 8,4 16,4 20,9 12,21" fill="url(#${g})" stroke="${c.dark}" stroke-width=".7" stroke-linejoin="round"/>
+    <polygon points="4,9 20,9 12,21" fill="#ffffff" opacity=".16"/>
+    <polyline points="8,4 10,9 12,21" fill="none" stroke="#fff" stroke-width=".5" opacity=".4"/>
+    <polyline points="16,4 14,9 12,21" fill="none" stroke="${c.dark}" stroke-width=".5" opacity=".45"/>
+    <line x1="4" y1="9" x2="20" y2="9" stroke="#fff" stroke-width=".5" opacity=".35"/>
+    <path class="gem-spark" d="M17.7 5 l.45 1.35 1.35 .45 -1.35 .45 -.45 1.35 -.45 -1.35 -1.35 -.45 1.35 -.45 z" fill="#fff"/>
+  </svg>`;
+}
+
 /* Every package unlocks every service — they differ only by usage limits. So any
    active membership clears the feature gate. */
 const routeMinTier = () => 1;
@@ -1473,7 +1496,7 @@ route("home", ()=>{
     </div>
 
     <div class="callout teal" style="margin-top:8px">
-      <span>💚</span><span>Wellness score <b>${S.readiness.overall}</b> · Stage 2 · <a href="#/profile">view growth</a></span>
+      <span class="heartbeat">💚</span><span>Wellness score <b>${S.readiness.overall}</b> · Stage 2 · <a href="#/profile">view growth</a></span>
     </div>
 
     ${reminderCardHTML()}
@@ -1613,7 +1636,7 @@ function membershipPlansHTML(currentId){
     const cur = p.id===currentId;
     return `<div class="card plan-card ${p.popular?"popular":""} ${cur?"active":""}" style="margin-bottom:12px;position:relative">
       ${p.popular?`<span class="chip gold" style="position:absolute;top:-9px;right:16px">Most popular</span>`:""}
-      <div class="row between"><b style="font-size:17px">${p.gem?p.gem+" ":""}${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
+      <div class="row between"><b style="font-size:17px;display:inline-flex;align-items:center;gap:7px">${gemIcon(p.id)}${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
       <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(fmtKes(p.price))}</span><span class="tiny faint">/${esc(p.per)}</span></div>
       <p class="tiny faint">${esc(p.tagline)}</p>
       <div class="stack" style="margin-top:12px">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
@@ -1665,7 +1688,7 @@ function membershipGate(routeName){
 function openMembershipSheet(planId){
   const p = planById(planId); if(!p) return;
   const box = sheet(`
-    <div class="center"><div style="font-size:38px">💚</div>
+    <div class="center"><div>${gemIcon(p.id, 44)}</div>
       <h3 style="margin-top:6px">${esc(p.name)} — ${esc(fmtKes(p.price))}/${esc(p.per)}</h3>
       <p class="muted tiny" style="margin:8px 0 4px">Recurring ${p.per==="week"?"weekly":"monthly"}. Cancel anytime.</p>
       <div class="stack" style="text-align:left;margin:10px 0">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
@@ -1717,7 +1740,7 @@ route("membership", ()=>{
   <div class="pad">
     ${plan ? `
     <div class="card" style="text-align:center;margin-top:8px">
-      <div style="font-size:40px">${expired ? "⏰" : "💚"}</div>
+      <div style="font-size:40px">${expired ? "⏰" : gemIcon(plan.id, 40)}</div>
       <h3 style="margin-top:6px">${esc(plan.name)} membership · ${expired ? "expired" : "active"}</h3>
       <p class="tiny faint" style="margin-top:4px">
         ${expired
@@ -2179,8 +2202,8 @@ route("profile", ()=>{
     ${(()=>{
       const p = membershipPlan();
       if(p && membershipExpired()) return featureRow("membership","⏰","Membership",`${p.name} expired — tap to renew`);
-      if(p) return featureRow("membership","💚","Membership",`${p.name} · ${fmtKes(p.price)}/${p.per} · renews in ${membershipDaysLeft()}d`);
-      return featureRow("membership","💚","Membership",`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`);
+      if(p) return featureRow("membership",gemIcon(p.id,22),`${p.name} membership`,`${fmtKes(p.price)}/${p.per} · renews in ${membershipDaysLeft()}d`);
+      return featureRow("membership","💎","Membership",`Choose a package from ${fmtKes(MEMBERSHIP_PLANS[0].price)}/${MEMBERSHIP_PLANS[0].per}`);
     })()}
     ${(()=>{ const c=cpl(); const sub = c.active ? `With ${esc(candidate(c.partnerId)?.name||"partner")} · ${daysTogether()} days` : "Unlocks when you both commit"; return featureRow("couple","💑","Couple Space",sub); })()}
     ${(()=>{ const p=marriageProgress(); const sub = p.done>0 ? `${p.done}/${p.total} conversations · ${p.pct}%` : "Stage 4 pathway"; return featureRow("marriage","💍","Marriage Preparation",sub); })()}
