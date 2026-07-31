@@ -20,7 +20,8 @@ const DEFAULT_STATE = {
   community:{ joined:[], posts:{} },
   events:{ rsvp:[] },
   premium:{ plan:"free" },
-  membership:{ plan:null, since:null },  // "weekly" | "basic" | "premium" — recurs per package
+  membership:{ plan:null, since:null },  // "sapphire" | "ruby" | "emerald" — recurs monthly
+  registration:{ email:null, emailVerified:false, phone:null, phoneVerified:false, paid:false, ts:null },
   progress:[],       // match/relationship progress reports for the counselling team
   listening:[],      // Listening Centre callback requests
   feedback:[],       // in-app feedback the member has sent
@@ -29,21 +30,15 @@ const DEFAULT_STATE = {
   tourSeen:false,    // has the first-run onboarding tour been shown/dismissed
 };
 
-/* Membership packages (KES, recurring). Anyone can register and browse; using a
-   feature requires an active package. `tier` controls WHICH services unlock:
-   tier 1 (Weekly) = matching & messaging only; tier 2+ (Basic/Premium) = everything.
-   `limits` then caps usage within the unlocked services.
+/* One-time registration fee (KES). Paid once, after email + phone verification,
+   to create an account. Separate from the monthly membership packages below. */
+const REGISTRATION_FEE = 200;
+
+/* Membership packages (KES / month, recurring). Registered members choose one to
+   unlock the features; `limits` cap monthly usage within them. Higher tier = more.
    Prototype — no payment is ever taken. */
 const MEMBERSHIP_PLANS = [
-  { id:"weekly", name:"Weekly", price:200, per:"week", tier:1, tagline:"Browse matches, week by week",
-    limits:{ matches:3, counselling:0, webinars:0, groups:0 },
-    features:[
-      "View up to 3 curated matches",
-      "View-only — connecting & messaging need Basic",
-      "Renews weekly — cancel anytime",
-      "Other services need Basic or Premium",
-    ] },
-  { id:"basic", name:"Basic", price:2500, per:"month", tier:2, tagline:"Everything you need to get started",
+  { id:"sapphire", name:"Sapphire", price:2500, per:"month", tier:1, gem:"💙", tagline:"Everything you need to get started",
     limits:{ matches:5, counselling:1, webinars:5, groups:1 },
     features:[
       "Up to 5 curated matches",
@@ -52,7 +47,7 @@ const MEMBERSHIP_PLANS = [
       "1 group membership",
       "Wellness Tools, Couple Space & Marriage Prep",
     ] },
-  { id:"premium", name:"Premium", price:3500, per:"month", tier:3, popular:true, tagline:"Unlimited access",
+  { id:"ruby", name:"Ruby", price:3500, per:"month", tier:2, gem:"❤️", popular:true, tagline:"Unlimited matching & more",
     limits:{ matches:Infinity, counselling:2, webinars:Infinity, groups:Infinity },
     features:[
       "Unlimited matches",
@@ -61,15 +56,21 @@ const MEMBERSHIP_PLANS = [
       "2 free counselling sessions / month",
       "Wellness Tools, Couple Space & Marriage Prep",
     ] },
+  { id:"emerald", name:"Emerald", price:5000, per:"month", tier:3, gem:"💚", tagline:"Our most complete plan",
+    limits:{ matches:Infinity, counselling:3, webinars:Infinity, groups:Infinity },
+    features:[
+      "Everything in Ruby",
+      "Unlimited webinars & group memberships",
+      "3 free counselling sessions / month",
+      "Priority counsellor support",
+    ] },
 ];
 const planById = id => MEMBERSHIP_PLANS.find(p => p.id === id) || null;
 const unlimited = n => n === Infinity;
 
-/* Tier 1 (Weekly) is VIEW-ONLY: browse matches and open a profile, nothing more.
-   Connecting, messaging and every other service need Basic (tier 2+). */
-const TIER1_ROUTES = ["matches","match"];
-const routeMinTier = name => TIER1_ROUTES.includes(name) ? 1 : 2;
-const canConnect = () => planTier() >= 2;   // express interest / accept / chat
+/* Every package unlocks every service — they differ only by usage limits. So any
+   active membership clears the feature gate. */
+const routeMinTier = () => 1;
 
 let S = load();
 let pendingInvite = null;   // invite code entered on the invite screen (Supabase mode)
@@ -409,6 +410,18 @@ function planLimit(key){ const p = membershipPlan(); return (p && !membershipExp
 function activateMembership(planId){ const m = membershipState(); m.plan = planId; m.since = Date.now(); save(); }
 function renewMembership(){ const m = membershipState(); if(m.plan){ m.since = Date.now(); save(); } }
 function cancelMembership(){ const m = membershipState(); m.plan = null; m.since = null; save(); }
+
+/* ---- Registration (email + phone OTP + one-time fee, simulated) ---- */
+function regState(){
+  if(!S.registration) S.registration = { email:null, emailVerified:false, phone:null, phoneVerified:false, paid:false, ts:null };
+  return S.registration;
+}
+const registered = () => { const r = regState(); return !!(r.emailVerified && r.phoneVerified && r.paid); };
+function payRegistration(){ const r = regState(); r.paid = true; r.ts = Date.now(); save(); }
+// Demo verification codes (no email/SMS is sent in this prototype).
+let regCodes = { email:null, phone:null };
+const gen6 = () => String(Math.floor(100000 + Math.random() * 900000));
+
 /* Where a paywall was hit, so activation can continue into what they wanted. */
 let gateIntentHash = null;
 
@@ -824,16 +837,16 @@ function render(){
   if(name !== "chat" && chatUnsub){ try{ chatUnsub(); }catch(e){} chatUnsub = null; }
 
   // Onboarding guard
-  const openRoutes = ["welcome","login","reset","invite","signup","readiness","conduct","result"];
+  const openRoutes = ["welcome","login","reset","invite","register","signup","readiness","conduct","result"];
   // Privacy lock — once logged out, nothing personal renders until you continue.
   if(S.loggedOut){
-    if(!["welcome","login","reset","invite","signup"].includes(name)) return go("welcome");
+    if(!["welcome","login","reset","invite","register","signup"].includes(name)) return go("welcome");
   }
   else if(!S.onboarded && !openRoutes.includes(name)){ return go("welcome"); }
-  else if(S.onboarded && ["welcome","invite","signup"].includes(name)){ return go("home"); }
+  else if(S.onboarded && ["welcome","invite","register","signup"].includes(name)){ return go("home"); }
 
-  // Membership gate — anyone can register and browse Home/Profile. Using a feature
-  // needs a package whose tier covers it (Weekly = matching/messaging only).
+  // Membership gate — registered members can browse Home/Profile; using any
+  // feature requires an active membership package.
   const freeRoutes = ["home","profile","membership","feedback"];
   const gated = S.onboarded && !freeRoutes.includes(name) && !openRoutes.includes(name)
              && planTier() < routeMinTier(name);
@@ -1054,12 +1067,103 @@ route("invite", ()=>({
     const boxes = $$(".elig",root);
     const check = ()=>{ verify.disabled = !boxes.every(b=>b.checked); };
     boxes.forEach(b=> b.onchange = check);
-    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to HeartWise Connections 💚"); go("signup"); };
+    verify.onclick = ()=>{ pendingInvite = null; toast("Welcome to HeartWise Connections 💚"); go("register"); };
   }
 }));
 
+/* ---- Registration: email verification + mobile OTP + one-time fee ---- */
+route("register", ()=>{
+  const r = regState();
+  const bothVerified = r.emailVerified && r.phoneVerified;
+  const codeNote = (label, code, medium)=>
+    `<div class="callout gold tiny" style="text-align:left">🔐 Demo: your ${label} is <b>${code}</b> — no ${medium} is actually sent in this prototype.</div>`;
+  return {
+  html:`
+  <div class="topbar"><button class="back" data-act="back">←</button><h2>Create your account</h2></div>
+  <div class="pad stack">
+    <p class="muted tiny">Every member is verified. Confirm your email and mobile number, then pay the one-time registration fee of <b>${esc(fmtKes(REGISTRATION_FEE))}</b>.</p>
+
+    <div class="card stack">
+      <div class="row between"><b>1 · Email</b>${r.emailVerified?`<span class="chip">✓ Verified</span>`:""}</div>
+      <label class="field"><span>Email address</span>
+        <input class="input" id="email" type="email" autocomplete="email" value="${esc(r.email||"")}" ${r.emailVerified?"disabled":""} placeholder="you@example.com"></label>
+      ${r.emailVerified ? "" : (regCodes.email
+        ? `${codeNote("email code", regCodes.email, "email")}
+           <label class="field"><span>Enter the 6-digit code</span><input class="input" id="ecode" inputmode="numeric" maxlength="6" placeholder="••••••"></label>
+           <div class="row" style="gap:8px"><button class="btn secondary sm" id="everify">Verify email</button><button class="btn ghost sm" id="eresend">Resend</button></div>`
+        : `<button class="btn secondary sm" id="esend">Send verification code</button>`)}
+    </div>
+
+    <div class="card stack">
+      <div class="row between"><b>2 · Mobile number</b>${r.phoneVerified?`<span class="chip">✓ Verified</span>`:""}</div>
+      <label class="field"><span>Mobile number</span>
+        <input class="input" id="phone" type="tel" autocomplete="tel" value="${esc(r.phone||"")}" ${r.phoneVerified?"disabled":""} placeholder="+254 7XX XXX XXX"></label>
+      ${r.phoneVerified ? "" : (regCodes.phone
+        ? `${codeNote("OTP", regCodes.phone, "SMS")}
+           <label class="field"><span>Enter the 6-digit OTP</span><input class="input" id="pcode" inputmode="numeric" maxlength="6" placeholder="••••••"></label>
+           <div class="row" style="gap:8px"><button class="btn secondary sm" id="pverify">Verify OTP</button><button class="btn ghost sm" id="presend">Resend</button></div>`
+        : `<button class="btn secondary sm" id="psend">Send OTP</button>`)}
+    </div>
+
+    <div class="card stack">
+      <div class="row between"><b>3 · Registration fee</b>${r.paid?`<span class="chip">✓ Paid</span>`:""}</div>
+      <p class="tiny muted">A one-time ${esc(fmtKes(REGISTRATION_FEE))} fee creates your verified account. Monthly membership packages are chosen later.</p>
+      ${r.paid ? "" : `<button class="btn ${bothVerified?"":"secondary"}" id="pay" ${bothVerified?"":"disabled"}>Pay ${esc(fmtKes(REGISTRATION_FEE))} (demo)</button>
+      ${bothVerified?"":`<p class="tiny faint">Verify your email and phone first.</p>`}`}
+    </div>
+
+    <button class="btn" id="continue" ${registered()?"":"disabled"}>Continue</button>
+    <p class="center tiny faint">🔒 Prototype — codes are shown on-screen because no email or SMS is sent, and no money is ever taken.</p>
+  </div>`,
+  mount(root){
+    $("[data-act=back]",root).onclick = ()=> go("invite");
+    const emailVal = ()=> ($("#email",root)?.value || "").trim();
+    const phoneVal = ()=> ($("#phone",root)?.value || "").trim();
+
+    const esend = $("#esend",root); if(esend) esend.onclick = ()=>{
+      const em = emailVal();
+      if(!/.+@.+\..+/.test(em)){ toast("Enter a valid email"); return; }
+      regState().email = em; regCodes.email = gen6(); save(); render();
+    };
+    const eresend = $("#eresend",root); if(eresend) eresend.onclick = ()=>{ regCodes.email = gen6(); toast("New code sent (demo)"); render(); };
+    const everify = $("#everify",root); if(everify) everify.onclick = ()=>{
+      if(($("#ecode",root).value||"").trim() === regCodes.email){ regState().emailVerified = true; save(); toast("Email verified ✓"); render(); }
+      else toast("That code doesn't match");
+    };
+
+    const psend = $("#psend",root); if(psend) psend.onclick = ()=>{
+      const ph = phoneVal();
+      if(ph.replace(/\D/g,"").length < 9){ toast("Enter a valid mobile number"); return; }
+      regState().phone = ph; regCodes.phone = gen6(); save(); render();
+    };
+    const presend = $("#presend",root); if(presend) presend.onclick = ()=>{ regCodes.phone = gen6(); toast("New OTP sent (demo)"); render(); };
+    const pverify = $("#pverify",root); if(pverify) pverify.onclick = ()=>{
+      if(($("#pcode",root).value||"").trim() === regCodes.phone){ regState().phoneVerified = true; save(); toast("Mobile number verified ✓"); render(); }
+      else toast("That OTP doesn't match");
+    };
+
+    const pay = $("#pay",root); if(pay) pay.onclick = ()=>{
+      const box = sheet(`<div class="center"><div style="font-size:36px">🧾</div>
+        <h3 style="margin-top:6px">Registration fee — ${esc(fmtKes(REGISTRATION_FEE))}</h3>
+        <p class="muted tiny" style="margin:8px 0 4px">A one-time fee to create your verified account.</p>
+        <div class="callout gold" style="text-align:left;margin:12px 0">🔒 Prototype — no payment method is requested and no money is taken.</div></div>
+        <button class="btn" id="yes">Pay ${esc(fmtKes(REGISTRATION_FEE))} (demo)</button>
+        <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`);
+      $("#no",box.el).onclick = box.close;
+      $("#yes",box.el).onclick = ()=>{ payRegistration(); box.close(); toast("Registration fee paid ✓"); render(); };
+    };
+
+    const cont = $("#continue",root); if(cont) cont.onclick = ()=>{
+      if(!registered()){ toast("Please finish verification and payment"); return; }
+      toast("Account created 💚"); go("signup");
+    };
+  }};
+});
+
 /* ---- Signup / profile ---- */
 route("signup", ()=>{
+  // New members must register (verify + pay) before building a profile.
+  if(!S.onboarded && !registered()) return go("register");
   const u = S.user || { values:[], color:"#0f6f6a" };
   return {
   html:`
@@ -1070,7 +1174,7 @@ route("signup", ()=>{
     ${(Backend.enabled() && !S.onboarded)?`
     <div class="card flat stack">
       <p class="tiny faint">Create your account</p>
-      <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com"></label>
+      <label class="field"><span>Email</span><input class="input" id="email" type="email" autocomplete="email" value="${esc(regState().email||"")}" placeholder="you@example.com"></label>
       <label class="field"><span>Password</span><input class="input" id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters"></label>
     </div>`:""}
 
@@ -1125,7 +1229,7 @@ route("signup", ()=>{
     <button class="btn" id="continue">Continue to Relationship Readiness</button>
   </div>`,
   mount(root){
-    $(".back",root).onclick = ()=> go("invite");
+    $(".back",root).onclick = ()=> go(S.onboarded ? "profile" : "register");
     // value chips (limit 5)
     $$("#values .chip",root).forEach(ch=> ch.onclick = ()=>{
       const on = $$("#values .chip.on",root);
@@ -1509,7 +1613,7 @@ function membershipPlansHTML(currentId){
     const cur = p.id===currentId;
     return `<div class="card plan-card ${p.popular?"popular":""} ${cur?"active":""}" style="margin-bottom:12px;position:relative">
       ${p.popular?`<span class="chip gold" style="position:absolute;top:-9px;right:16px">Most popular</span>`:""}
-      <div class="row between"><b style="font-size:17px">${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
+      <div class="row between"><b style="font-size:17px">${p.gem?p.gem+" ":""}${esc(p.name)}</b>${cur?`<span class="chip">Current</span>`:""}</div>
       <div style="margin:4px 0 2px"><span style="font-size:24px;font-weight:800;color:var(--teal-700)">${esc(fmtKes(p.price))}</span><span class="tiny faint">/${esc(p.per)}</span></div>
       <p class="tiny faint">${esc(p.tagline)}</p>
       <div class="stack" style="margin-top:12px">${p.features.map(f=>`<div class="reason"><span class="k">✓</span><span class="tiny">${esc(f)}</span></div>`).join("")}</div>
@@ -1526,14 +1630,10 @@ function membershipGate(routeName){
   const label = FEATURE_LABELS[routeName] || "this feature";
   const cur = membershipPlan();
   const expired = membershipExpired();
-  // Lapsed package, Weekly hitting a Basic-only service, or no package at all.
-  const upgrade = !expired && !!cur && cur.tier < routeMinTier(routeName);
-  const heading = expired ? "Membership expired" : upgrade ? "Upgrade needed" : "Members only";
+  const heading = expired ? "Membership expired" : "Members only";
   const intro = expired
     ? `⏰ Your <b>${esc(cur.name)}</b> membership expired on ${esc(fmtDate(new Date(membershipExpiry())))}. Renew to open <b>${esc(label)}</b> again — your profile and progress are safe. 💚`
-    : upgrade
-    ? `Your <b>${esc(cur.name)}</b> package is view-only matching. <b>${esc(label)}</b> needs Basic or Premium.`
-    : `You're registered and free to explore. To open <b>${esc(label)}</b>, choose a membership package.`;
+    : `You're registered. To open <b>${esc(label)}</b>, choose a membership package.`;
   return {
   html:`
   <div class="pad">
@@ -1585,17 +1685,19 @@ function openMembershipSheet(planId){
 const LIMIT_NOUNS = { matches:"matches", webinars:"webinars", groups:"group memberships", counselling:"free counselling sessions" };
 function openUpsell(key){
   const p = membershipPlan(), noun = LIMIT_NOUNS[key] || "items", lim = planLimit(key);
-  const premium = planById("premium");
-  const canUpgrade = p && p.id !== "premium" && premium.limits[key] > lim;
-  const premAllow = unlimited(premium.limits[key]) ? "unlimited" : premium.limits[key];
-  const line = canUpgrade
-    ? `Upgrade to <b>Premium</b> for ${premAllow} ${esc(noun)}.`
+  // Smallest higher-tier plan that actually raises this limit.
+  const better = MEMBERSHIP_PLANS
+    .filter(x => x.tier > (p ? p.tier : 0) && x.limits[key] > lim)
+    .sort((a,b) => a.tier - b.tier)[0];
+  const betterAllow = better ? (unlimited(better.limits[key]) ? "unlimited" : better.limits[key]) : null;
+  const line = better
+    ? `Upgrade to <b>${esc(better.name)}</b> for ${betterAllow} ${esc(noun)}.`
     : `That's the monthly allowance included in your plan.`;
   const box = sheet(`
     <div class="center"><div style="font-size:36px">⭐</div>
       <h3 style="margin-top:6px">You've reached your ${esc(noun)} limit</h3>
       <p class="muted tiny" style="margin:8px 0 4px">Your ${esc(p?p.name:"")} plan includes ${unlimited(lim)?"unlimited":lim} ${esc(noun)} per month. ${line}</p></div>
-    ${canUpgrade ? `<button class="btn" id="up">See Premium</button>
+    ${better ? `<button class="btn" id="up">See ${esc(better.name)}</button>
     <button class="btn ghost" id="no" style="margin-top:6px">Not now</button>`
     : `<button class="btn" id="no">Got it</button>`}`);
   $("#no",box.el).onclick = box.close;
@@ -1630,7 +1732,7 @@ route("membership", ()=>{
     <div class="list-row" data-act="cancel" style="margin-top:4px"><div class="lico">⏸️</div><div class="grow"><b>Cancel membership</b><div class="sub">Keep browsing; features lock until you resubscribe</div></div><div class="chev">›</div></div>
     <p class="center tiny faint" style="margin-top:16px">Prototype — no payment is ever taken.</p>
     ` : `
-    <p class="muted tiny">You're registered and free to explore. Choose a package to unlock the app — Weekly covers matching, Basic and Premium open everything. Cancel anytime.</p>
+    <p class="muted tiny">You're registered. Choose a monthly package to unlock the app — every package opens all the features and differs only by usage limits. Cancel anytime.</p>
     <div style="margin-top:16px">${membershipPlansHTML(null)}</div>
     <div class="callout gold" style="margin-top:2px;text-align:left">🔒 Prototype — no payment method is requested and no money is ever taken.</div>
     <button class="btn ghost" id="later" style="margin-top:10px">Maybe later — explore the app</button>
@@ -1708,9 +1810,7 @@ route("match", (id)=>{
     </div>`:""}
 
     <div style="width:100%">${connectCTA(id)}</div>
-    <p class="tiny faint">${canConnect()
-      ? "Messaging opens only when you both agree to connect."
-      : "Your Weekly package is view-only — upgrade to Basic or Premium to connect and message."}</p>
+    <p class="tiny faint">Messaging opens only when you both agree to connect.</p>
   </div>`,
   mount(root){
     $("[data-act=back]",root).onclick = ()=> history.length>1 ? history.back() : go("matches");
@@ -1721,9 +1821,6 @@ route("match", (id)=>{
 
 function connectCTA(id){
   const st = statusFor(id);
-  // View-only packages (Weekly) can browse profiles but not connect or message.
-  if(!canConnect() && st!=="blocked")
-    return `<button class="btn" data-cta="upgrade">⭐ Upgrade to connect</button>`;
   if(st==="connected") return `<button class="btn" data-cta="chat">💬 Open conversation</button>`;
   if(st==="you_sent")  return `<button class="btn" disabled>Interest sent — awaiting reply ⏳</button>`;
   if(st==="they_sent") return `<button class="btn coral" data-cta="accept">💌 Accept & connect</button>`;
@@ -1734,8 +1831,6 @@ function wireConnectCTA(root, id){
   const btn = $("[data-cta]",root); if(!btn) return;
   const act = btn.dataset.cta;
   const name = (cardFor(id) || {}).name || "them";
-
-  if(act==="upgrade"){ btn.onclick = ()=> go("membership"); return; }
 
   /* ---- Supabase mode: consent is enforced server-side ---- */
   if(Backend.enabled()){
