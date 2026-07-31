@@ -302,6 +302,10 @@ textarea.input{ resize:vertical; min-height:84px; }
 .kv:last-child{ border-bottom:none; }
 .kv .k{ color:var(--ink-faint); }
 .fade-in{ animation:fade .3s ease both; }
+/* Blinking red heart on the renew-subscription alert */
+.blink-heart{ display:inline-block; color:#e0322a; animation:heartblink 1s ease-in-out infinite; }
+@keyframes heartblink{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.25; transform:scale(.82); } }
+@media (prefers-reduced-motion:reduce){ .blink-heart{ animation:none; } }
 /* Brief highlight so refreshing a card is visibly acknowledged */
 .flash{ animation:flash .6s ease both; }
 @keyframes flash{

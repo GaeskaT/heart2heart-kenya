@@ -448,13 +448,13 @@ function membershipReminder(){
   if(left === null) return null;
   if(left < 0){
     const ago = Math.abs(left);
-    return { kind:"expired", tone:"coral", emoji:"⏰",
+    return { kind:"expired", tone:"coral", emoji:"❤️", blink:true,
       title:`Your ${p.name} membership has expired`,
       body:`It lapsed ${ago === 0 ? "today" : ago === 1 ? "yesterday" : `${ago} days ago`}. Renew for ${fmtKes(p.price)}/${p.per} to unlock everything again. 💚`,
       cta:"Renew now" };
   }
   if(left === 0){
-    return { kind:"today", tone:"gold", emoji:"⌛",
+    return { kind:"today", tone:"coral", emoji:"❤️", blink:true,
       title:`Your ${p.name} membership ends today`,
       body:`Renew now so your matches and services stay open. 🙌`, cta:"Renew now" };
   }
@@ -478,7 +478,7 @@ function maybeToastReminder(){
 function reminderCardHTML(){
   const r = membershipReminder(); if(!r) return "";
   return `<button class="callout ${r.tone}" id="reminder-cta" style="width:100%;text-align:left;margin-top:12px;border:none;cursor:pointer;align-items:flex-start">
-    <span>${r.emoji}</span>
+    <span class="${r.blink?"blink-heart":""}">${r.emoji}</span>
     <span><b>${esc(r.title)}</b><br><span class="tiny">${esc(r.body)}</span>
     <br><span class="chip" style="margin-top:8px;display:inline-block">${esc(r.cta)} →</span></span>
   </button>`;
