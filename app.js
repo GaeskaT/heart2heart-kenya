@@ -1502,7 +1502,7 @@ route("home", ()=>{
     ${reminderCardHTML()}
 
     ${inbound ? `<div class="callout coral" style="margin-top:10px">
-      <span>💌</span><span><b>${inbound}</b> ${inbound>1?"people have":"person has"} expressed interest in connecting. <a href="#/matches">See who</a></span></div>`:""}
+      <span class="love-note">💌</span><span><b>${inbound}</b> ${inbound>1?"people have":"person has"} expressed interest in connecting. <a href="#/matches">See who</a></span></div>`:""}
 
     <div class="sec-h"><h3>This week's reflection</h3></div>
     <div class="prompt-card">
@@ -1559,7 +1559,7 @@ function matchCardHTML(m){
   const c = m.c; const st = statusFor(c.id);
   const cta = st==="connected" ? `<span class="chip">Connected 💬</span>`
             : st==="you_sent"  ? `<span class="chip gold">Interest sent ⏳</span>`
-            : st==="they_sent" ? `<span class="chip coral">Interested in you 💌</span>`
+            : st==="they_sent" ? `<span class="chip coral">Interested in you <span class="love-note">💌</span></span>`
             : "";
   return `
   <div class="card match" data-match="${c.id}">
@@ -1809,7 +1809,7 @@ route("match", (id)=>{
       <div class="row" style="justify-content:center;gap:8px"><h2>${esc(c.name)}${c.age?`, ${c.age}`:""}</h2>${c.verified?`<span class="verified">✓ Verified</span>`:""}</div>
       <p class="muted tiny">${esc(c.career||"")}${c.career&&c.county?" · ":""}${esc(c.county||"")}</p>
     </div>
-    ${m.pct==null?"":`<div class="chip" style="background:var(--teal-700);color:#fff">${m.pct}% compatibility</div>`}
+    ${m.pct==null?"":`<div class="chip score" style="background:var(--teal-700);color:#fff">${m.pct}% compatibility</div>`}
 
     ${c.bio?`<div class="card" style="text-align:left">
       <p style="font-style:italic">"${esc(c.bio)}"</p>
@@ -2032,7 +2032,7 @@ route("messages", ()=>{
           return `<div class="thread-item" data-req="${x.id}">
             ${avatar(x.cand.name,x.cand.color,"sm")}
             <div class="grow"><div class="row between"><b>${esc(x.cand.name)}</b><span class="chip coral tiny">Wants to connect</span></div>
-              <div class="last">💌 Expressed interest — tap to respond</div></div></div>`;
+              <div class="last"><span class="love-note">💌</span> Expressed interest — tap to respond</div></div></div>`;
         }
         return `<div class="thread-item" data-chat="${x.id}">
           ${avatar(x.cand.name,x.cand.color,"sm")}
